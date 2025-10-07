@@ -74,15 +74,16 @@ def main():
     if sources["RSS Feeds"]:
         with st.sidebar.expander("RSS Settings"):
             default_feeds = [
-                "https://blog.openai.com/rss/",
-                "https://ai.googleblog.com/feeds/posts/default"
+                "https://openai.com/news/rss.xml",
             ]
             feeds_input = st.text_area(
                 "Feed URLs (one per line)",
-                value="\n".join(default_feeds)
+                value="\n".join(default_feeds),
+                help="Add one feed URL per line. Each feed will be fetched separately."
             )
             rss_params['feed_urls'] = [f.strip() for f in feeds_input.split('\n') if f.strip()]
-            rss_params['limit'] = st.slider("Entries per feed", 5, 50, 10, key="rss_limit")
+            rss_params['limit'] = st.slider("Entries per feed", 5, 100, 25, key="rss_limit", 
+                                           help="Number of articles to fetch from each feed")
     
     if sources["Blogs"]:
         with st.sidebar.expander("Blog Settings"):
@@ -106,7 +107,13 @@ def main():
     
     # General settings
     st.sidebar.subheader("🔧 General")
-    max_total_items = st.sidebar.number_input("Max total items", 10, 500, 100)
+    max_total_items = st.sidebar.number_input(
+        "Max total items", 
+        min_value=10, 
+        max_value=1000, 
+        value=200,
+        help="Maximum total items to display across all sources. Increase if items are being cut off."
+    )
     
     # Fetch button
     fetch_button = st.sidebar.button("🔄 Fetch Content", type="primary", use_container_width=True)
@@ -188,9 +195,14 @@ def main():
                     except Exception as e:
                         st.sidebar.error(f"❌ X error: {e}")
         
-        # Limit total items
+        # Limit total items and show warning if truncated
+        total_fetched = len(all_items)
         st.session_state.content_items = all_items[:max_total_items]
         st.session_state.last_fetch = datetime.now()
+        
+        # Show warning if items were truncated
+        if total_fetched > max_total_items:
+            st.sidebar.warning(f"⚠️ Showing {max_total_items} of {total_fetched} items. Increase 'Max total items' to see more.")
     
     # Get items from session state
     items = st.session_state.content_items
