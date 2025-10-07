@@ -270,7 +270,18 @@ def main():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.bar_chart(source_counts)
+        # Create a simple DataFrame for the chart to avoid data set errors
+        try:
+            chart_data = pd.DataFrame({
+                'count': source_counts.values
+            }, index=source_counts.index)
+            st.bar_chart(chart_data)
+        except Exception as e:
+            # Fallback to text display if chart fails
+            st.info("📊 Source Distribution (Chart unavailable)")
+            for source, count in source_counts.items():
+                info = source_info.get(source, {'emoji': '📄', 'name': source.title()})
+                st.write(f"{info['emoji']} {info['name']}: **{count}** items")
     
     with col2:
         st.markdown("**Active Sources:**")
