@@ -246,13 +246,37 @@ def main():
     # Source distribution
     st.subheader("📈 Distribution by Source")
     source_counts = df['source'].value_counts()
+    
+    # Source-specific info
+    source_info = {
+        'reddit': {'emoji': '📱', 'name': 'Reddit', 'color': '#FF4500'},
+        'rss': {'emoji': '📰', 'name': 'RSS Feeds', 'color': '#FFA500'},
+        'blog': {'emoji': '📝', 'name': 'Blogs', 'color': '#4CAF50'},
+        'x': {'emoji': '🐦', 'name': 'X/Twitter', 'color': '#1DA1F2'},
+    }
+    
     col1, col2 = st.columns([2, 1])
     
     with col1:
         st.bar_chart(source_counts)
     
     with col2:
-        st.dataframe(source_counts.reset_index().rename(columns={'index': 'Source', 'source': 'Count'}))
+        st.markdown("**Active Sources:**")
+        for source, count in source_counts.items():
+            info = source_info.get(source, {'emoji': '📄', 'name': source.title()})
+            st.markdown(f"{info['emoji']} **{info['name']}**: {count} items")
+    
+    # Show source-specific tips
+    if len(source_counts) == 1:
+        source = source_counts.index[0]
+        if source == 'reddit':
+            st.info("💡 **Reddit Tips:** Score = upvotes, Comments = discussion activity. Higher scores often indicate quality content.")
+        elif source == 'rss':
+            st.info("💡 **RSS Tips:** Check summary and tags for quick overview. Published date shows when article was released.")
+        elif source == 'blog':
+            st.info("💡 **Blog Tips:** Summary provides article overview. Check domain to identify source publication.")
+        elif source == 'x':
+            st.info("💡 **X/Twitter Tips:** Engagement = total interactions. Shares and replies indicate viral potential.")
     
     st.divider()
     
@@ -311,10 +335,35 @@ def main():
     # Display options
     st.subheader("📋 Content")
     
+    # Get available columns from the data
+    available_columns = df_sorted.columns.tolist()
+    
+    # Define source-specific recommended columns
+    source_column_recommendations = {
+        'reddit': ['title', 'source', 'author', 'score', 'comments_count', 'created_date', 'category'],
+        'rss': ['title', 'source', 'author', 'created_date', 'summary', 'category', 'tags'],
+        'blog': ['title', 'source', 'author', 'created_date', 'summary', 'category'],
+        'x': ['title', 'source', 'author', 'score', 'shares_count', 'created_date', 'tags'],
+    }
+    
+    # Determine which sources are present
+    sources_present = df_sorted['source'].unique().tolist()
+    
+    # Smart default: use source-specific columns if single source, otherwise use common columns
+    if len(sources_present) == 1:
+        source = sources_present[0]
+        default_columns = [col for col in source_column_recommendations.get(source, ['title', 'source', 'created_date']) 
+                          if col in available_columns]
+    else:
+        # Multi-source: show common useful columns
+        default_columns = [col for col in ['title', 'source', 'author', 'created_date', 'score', 'summary'] 
+                          if col in available_columns]
+    
+    # Let user customize
     display_columns = st.multiselect(
         "Select columns to display",
-        options=['title', 'source', 'author', 'score', 'comments_count', 'created_date', 'category', 'tags', 'summary'],
-        default=['title', 'source', 'author', 'score', 'comments_count', 'created_date']
+        options=available_columns,
+        default=default_columns
     )
     
     if display_columns:
@@ -365,20 +414,78 @@ def main():
         
         with col2:
             st.markdown("**Metadata**")
-            st.markdown(f"**Source:** {selected_item['source']}")
-            if selected_item.get('author'):
-                st.markdown(f"**Author:** {selected_item['author']}")
-            st.markdown(f"**Score:** {selected_item['score']}")
-            st.markdown(f"**Comments:** {selected_item['comments_count']}")
-            st.markdown(f"**Date:** {selected_item['created_date']}")
             
-            if selected_item.get('category'):
+            # Source badge with emoji
+            source_emoji = {
+                'reddit': '📱',
+                'rss': '📰',
+                'blog': '📝',
+                'x': '🐦'
+            }
+            emoji = source_emoji.get(selected_item['source'], '📄')
+            st.markdown(f"**Source:** {emoji} {selected_item['source'].upper()}")
+            
+            # Author (if available)
+            if selected_item.get('author') and selected_item['author']:
+                author_display = selected_item['author']
+                if selected_item.get('author_url'):
+                    st.markdown(f"**Author:** [{author_display}]({selected_item['author_url']})")
+                else:
+                    st.markdown(f"**Author:** {author_display}")
+            
+            # Source-specific metrics
+            source_type = selected_item['source']
+            
+            if source_type == 'reddit':
+                # Reddit-specific: score, comments, upvote ratio
+                st.markdown(f"**Score:** {selected_item['score']}")
+                st.markdown(f"**Comments:** {selected_item['comments_count']}")
+                if selected_item.get('metadata') and isinstance(selected_item['metadata'], dict):
+                    if 'upvote_ratio' in selected_item['metadata']:
+                        st.markdown(f"**Upvote Ratio:** {selected_item['metadata']['upvote_ratio']:.1%}")
+            
+            elif source_type == 'rss':
+                # RSS-specific: published date, feed info
+                st.markdown(f"**Published:** {selected_item['created_date']}")
+                if selected_item.get('metadata') and isinstance(selected_item['metadata'], dict):
+                    if 'feed_title' in selected_item['metadata']:
+                        st.markdown(f"**Feed:** {selected_item['metadata']['feed_title']}")
+            
+            elif source_type == 'blog':
+                # Blog-specific: domain, published date
+                st.markdown(f"**Published:** {selected_item['created_date']}")
+                if selected_item.get('metadata') and isinstance(selected_item['metadata'], dict):
+                    if 'domain' in selected_item['metadata']:
+                        st.markdown(f"**Domain:** {selected_item['metadata']['domain']}")
+            
+            elif source_type == 'x':
+                # X/Twitter-specific: likes, retweets, replies
+                st.markdown(f"**Engagement:** {selected_item['score']}")
+                st.markdown(f"**Shares:** {selected_item.get('shares_count', 0)}")
+                st.markdown(f"**Replies:** {selected_item['comments_count']}")
+            
+            else:
+                # Generic fallback
+                st.markdown(f"**Date:** {selected_item['created_date']}")
+                if selected_item.get('score', 0) > 0:
+                    st.markdown(f"**Score:** {selected_item['score']}")
+                if selected_item.get('comments_count', 0) > 0:
+                    st.markdown(f"**Comments:** {selected_item['comments_count']}")
+            
+            # Category and tags
+            if selected_item.get('category') and selected_item['category']:
                 st.markdown(f"**Category:** {selected_item['category']}")
             
             if selected_item.get('tags') and selected_item['tags']:
-                tags_str = ', '.join(selected_item['tags']) if isinstance(selected_item['tags'], list) else selected_item['tags']
-                st.markdown(f"**Tags:** {tags_str}")
+                if isinstance(selected_item['tags'], list):
+                    if selected_item['tags']:
+                        tags_str = ', '.join(str(tag) for tag in selected_item['tags'])
+                        st.markdown(f"**Tags:** {tags_str}")
+                else:
+                    st.markdown(f"**Tags:** {selected_item['tags']}")
             
+            # Links section
+            st.markdown("---")
             st.markdown("**Links:**")
             if selected_item.get('source_url'):
                 st.markdown(f"[🔗 View Original]({selected_item['source_url']})")
