@@ -1,0 +1,40 @@
+{
+  "app_name": "AI Newsletter Scraper",
+  "debug": false,
+  "log_level": "INFO",
+  "reddit": {
+    "enabled": true,
+    "limit": 25,
+    "subreddits": ["AI_Agents", "MachineLearning", "artificial"],
+    "sort": "hot",
+    "time_filter": "all"
+  },
+  "rss": {
+    "enabled": true,
+    "limit": 10,
+    "feed_urls": [
+      "https://blog.openai.com/rss/",
+      "https://www.anthropic.com/rss.xml",
+      "https://ai.googleblog.com/feeds/posts/default"
+    ]
+  },
+  "blog": {
+    "enabled": true,
+    "limit": 10,
+    "urls": [],
+    "template": "wordpress"
+  },
+  "x": {
+    "enabled": false,
+    "limit": 10,
+    "api_key": "",
+    "api_secret": "",
+    "access_token": "",
+    "access_token_secret": "",
+    "bearer_token": "",
+    "queries": ["#AI", "#MachineLearning", "#AIAgents"]
+  },
+  "cache_enabled": true,
+  "cache_ttl": 3600
+}
+

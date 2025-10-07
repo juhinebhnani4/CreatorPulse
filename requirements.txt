@@ -1,0 +1,22 @@
+# Core dependencies
+streamlit==1.28.1
+requests==2.31.0
+pandas==2.1.3
+python-dateutil==2.8.2
+
+# RSS/Feed parsing
+feedparser==6.0.10
+
+# Web scraping
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Optional: Twitter/X support (install separately if needed)
+# tweepy==4.14.0
+
+# Development dependencies (install with: pip install -e ".[dev]")
+# pytest==7.4.3
+# pytest-cov==4.1.0
+# black==23.11.0
+# flake8==6.1.0
+# mypy==1.7.1
