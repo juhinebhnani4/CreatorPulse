@@ -1,5 +1,5 @@
 {
-  "app_name": "AI Newsletter Scraper",
+  "app_name": "CreatorPulse - AI Newsletter Generator",
   "debug": false,
   "log_level": "INFO",
   "reddit": {
@@ -27,12 +27,47 @@
   "x": {
     "enabled": false,
     "limit": 10,
-    "api_key": "",
-    "api_secret": "",
-    "access_token": "",
-    "access_token_secret": "",
-    "bearer_token": "",
     "queries": ["#AI", "#MachineLearning", "#AIAgents"]
+  },
+  "youtube": {
+    "enabled": true,
+    "limit": 15,
+    "channel_ids": [
+      "UC_x5XG1OV2P6uZZ5FSM9Ttw",
+      "UCbfYPyITQ-7l4upoX8nvctg"
+    ],
+    "channel_usernames": [
+      "GoogleDevelopers",
+      "MicrosoftDeveloper"
+    ],
+    "search_queries": [
+      "AI news",
+      "machine learning tutorial"
+    ],
+    "order": "date",
+    "max_results_per_request": 50
+  },
+  "newsletter": {
+    "model": "gpt-4-turbo-preview",
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "template": "default",
+    "language": "en",
+    "tone": "professional"
+  },
+  "email": {
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "use_tls": true,
+    "from_name": "CreatorPulse",
+    "use_sendgrid": false
+  },
+  "scheduler": {
+    "enabled": true,
+    "time": "08:00",
+    "timezone": "UTC",
+    "max_retries": 3,
+    "retry_delay": 300
   },
   "cache_enabled": true,
   "cache_ttl": 3600

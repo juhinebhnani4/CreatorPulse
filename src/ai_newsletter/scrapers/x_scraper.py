@@ -142,9 +142,10 @@ class XScraper(BaseScraper):
             self.logger.info(f"Searching X for: {search_query}")
             
             # Fetch tweets using API v2
+            # X API requires max_results between 10-100
             tweets = self.client.search_recent_tweets(
                 query=search_query,
-                max_results=min(limit, 100),
+                max_results=max(10, min(limit, 100)),
                 tweet_fields=['created_at', 'public_metrics', 'entities', 'author_id'],
                 user_fields=['username', 'name'],
                 expansions=['author_id'],

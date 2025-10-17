@@ -120,16 +120,20 @@ class RSSFeedScraper(BaseScraper):
         # Extract content
         content = ''
         summary = ''
-        
+
         if hasattr(raw_item, 'content') and raw_item.content:
             content = raw_item.content[0].get('value', '')
         elif hasattr(raw_item, 'description'):
             content = raw_item.get('description', '')
-        
-        if hasattr(raw_item, 'summary'):
+
+        # Generate summary with fallback chain
+        if hasattr(raw_item, 'summary') and raw_item.summary:
             summary = raw_item.get('summary', '')
-        else:
+        elif content:
             summary = content[:200] + '...' if len(content) > 200 else content
+        else:
+            # Fallback: use title
+            summary = title[:200] + '...' if len(title) > 200 else title
         
         # Extract author
         author = None

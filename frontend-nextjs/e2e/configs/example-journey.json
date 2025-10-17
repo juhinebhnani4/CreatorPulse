@@ -1,0 +1,107 @@
+{
+  "name": "Example User Journey (Config-Driven)",
+  "description": "Example of a complete user journey defined in JSON",
+  "tags": ["example", "demo"],
+  "timeout": 30000,
+  "beforeEach": [
+    {
+      "name": "Clear browser storage",
+      "action": "navigate",
+      "url": "/"
+    }
+  ],
+  "steps": [
+    {
+      "name": "Navigate to landing page",
+      "action": "navigate",
+      "url": "/",
+      "description": "Visit the application landing page",
+      "screenshot": true
+    },
+    {
+      "name": "Verify landing page loaded",
+      "action": "verify_visible",
+      "selector": {
+        "role": "heading",
+        "name": "Welcome"
+      },
+      "timeout": 10000
+    },
+    {
+      "name": "Click Get Started button",
+      "action": "click",
+      "selector": {
+        "role": "link",
+        "name": "Get Started"
+      }
+    },
+    {
+      "name": "Wait for navigation to signup page",
+      "action": "wait_for_navigation",
+      "urlPattern": "register|signup",
+      "timeout": 15000
+    },
+    {
+      "name": "Fill name field",
+      "action": "fill",
+      "selector": {
+        "label": "Name"
+      },
+      "value": "Test User"
+    },
+    {
+      "name": "Fill email field",
+      "action": "fill",
+      "selector": {
+        "label": "Email"
+      },
+      "value": "test-user@example.com"
+    },
+    {
+      "name": "Fill password field",
+      "action": "fill",
+      "selector": {
+        "label": "Password"
+      },
+      "value": "SecurePassword123!"
+    },
+    {
+      "name": "Take screenshot of filled form",
+      "action": "screenshot",
+      "screenshot": true
+    },
+    {
+      "name": "Submit registration form",
+      "action": "click",
+      "selector": {
+        "role": "button",
+        "name": "Create Account"
+      }
+    },
+    {
+      "name": "Wait for redirect to dashboard",
+      "action": "wait_for_navigation",
+      "urlPattern": "app|dashboard",
+      "timeout": 15000
+    },
+    {
+      "name": "Verify user is logged in",
+      "action": "verify_visible",
+      "selector": {
+        "role": "button",
+        "name": "Profile"
+      }
+    },
+    {
+      "name": "Verify welcome message",
+      "action": "verify_text",
+      "value": "Welcome"
+    },
+    {
+      "name": "Take final screenshot",
+      "action": "screenshot",
+      "screenshot": true
+    }
+  ],
+  "afterEach": []
+}

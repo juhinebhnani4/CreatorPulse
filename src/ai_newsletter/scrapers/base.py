@@ -188,10 +188,61 @@ class BaseScraper(ABC):
         
         return filtered
     
+    def supports_link_crawling(self) -> bool:
+        """
+        Indicate whether this scraper supports deep link crawling.
+
+        When enabled, the scraper will:
+        1. Extract article links from list pages
+        2. Fetch full content from individual article pages
+        3. Merge data for maximum completeness
+
+        Returns:
+            True if the scraper supports crawling, False otherwise (default)
+        """
+        return False
+
+    def _extract_article_links(
+        self,
+        soup: Any,
+        base_url: str,
+        limit: int = 10
+    ) -> List[str]:
+        """
+        Extract article links from a list/index page.
+
+        This method should be overridden by scrapers that support link crawling.
+        It should extract valid article URLs and filter out navigation/metadata links.
+
+        Args:
+            soup: BeautifulSoup object of the list page
+            base_url: Base URL for resolving relative links
+            limit: Maximum number of links to extract
+
+        Returns:
+            List of article URLs (empty by default)
+        """
+        return []
+
+    def _fetch_full_item(self, article_url: str) -> Optional[ContentItem]:
+        """
+        Fetch full content from an individual article page.
+
+        This method should be overridden by scrapers that support link crawling.
+        It should fetch and parse a single article page into a ContentItem.
+
+        Args:
+            article_url: URL of the article to fetch
+
+        Returns:
+            ContentItem with full article data, or None if fetch failed
+        """
+        return None
+
     def get_source_info(self) -> Dict[str, str]:
         """
         Get information about this scraper source.
-        
+
         Returns:
             Dictionary with source information
         """
@@ -200,7 +251,7 @@ class BaseScraper(ABC):
             'type': self.source_type,
             'class': self.__class__.__name__,
         }
-    
+
     def __repr__(self) -> str:
         """String representation of the scraper."""
         return f"{self.__class__.__name__}(source='{self.source_name}')"

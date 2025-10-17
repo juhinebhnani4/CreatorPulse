@@ -1,0 +1,23 @@
+# Testing dependencies for backend integration tests
+
+# Core testing framework
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# HTTP testing
+httpx>=0.25.0
+
+# Test data factories
+faker>=22.0.0
+factory-boy>=3.3.0
+
+# Mocking
+pytest-mock>=3.12.0
+responses>=0.24.0
+
+# Time/date mocking
+freezegun>=1.4.0
+
+# Coverage reporting
+coverage[toml]>=7.4.0

@@ -1,0 +1,374 @@
+Your Actual Architecture
+scraper-scripts/
+│
+├── backend/                            # FastAPI Backend API
+│   ├── api/                           # REST API endpoints
+│   ├── services/                      # Business logic services
+│   ├── models/                        # Database models (SQLAlchemy)
+│   ├── migrations/                    # Alembic database migrations
+│   ├── middleware/                    # Auth, CORS, etc.
+│   ├── utils/                         # Helper utilities
+│   ├── tests/                         # Backend tests
+│   ├── main.py                        # FastAPI application
+│   ├── worker.py                      # Background job worker
+│   ├── config.py                      # Configuration
+│   └── database.py                    # Database connection
+│
+├── src/ai_newsletter/                  # Core Business Logic (Shared Library)
+│   ├── auth/                          # Authentication logic
+│   ├── config/                        # Settings configuration
+│   ├── database/                      # Database operations
+│   ├── delivery/                      # Email sending
+│   ├── generators/                    # Newsletter generation (AI)
+│   ├── models/                        # Pydantic models
+│   ├── orchestrator/                  # Workflow orchestration
+│   ├── scheduler/                     # Cron scheduling
+│   ├── scrapers/                      # Content scrapers (Reddit, RSS, X, Blog, YouTube)
+│   └── utils/                         # Shared utilities
+│
+├── frontend-nextjs/                    # Next.js Frontend (Production UI)
+│   ├── src/
+│   │   ├── app/                       # Next.js 14 App Router
+│   │   │   ├── page.tsx              # Landing page
+│   │   │   ├── login/                # Login page
+│   │   │   ├── register/             # Register page
+│   │   │   ├── app/page.tsx          # Dashboard
+│   │   │   ├── app/settings/         # Settings page
+│   │   │   └── app/history/          # History page
+│   │   ├── components/               # React components
+│   │   │   ├── layout/               # AppHeader, etc.
+│   │   │   ├── modals/               # Modals (send, schedule, etc.)
+│   │   │   ├── settings/             # 10 settings components
+│   │   │   └── ui/                   # Shadcn/Radix UI primitives
+│   │   ├── lib/
+│   │   │   ├── api/                  # 10 API client modules
+│   │   │   └── stores/               # Zustand state management
+│   │   └── types/                    # TypeScript types
+│   └── package.json
+│
+├── examples/                           # Example/Reference Scripts
+│   ├── creatorpulse_example.py
+│   ├── generate_newsletter.py
+│   └── scheduled_newsletter.py
+│
+├── tests/                              # Integration/Unit Tests
+│   ├── integration/
+│   │   ├── test_pipeline_integration.py
+│   │   └── test_supabase_integration.py
+│   └── unit/
+│       ├── test_newsletter_generator.py
+│       ├── test_email_sender.py
+│       └── test_*.py
+│
+├── scripts/                            # Utility scripts
+├── docs/                               # Documentation
+│
+├── .env                                # Environment variables
+├── requirements.txt                    # Python dependencies
+├── pyproject.toml                      # Python project config
+└── README.md                           # Project documentation
+Key Architecture Points
+1. Backend (FastAPI): Port 8000
+RESTful API with 10+ endpoint groups
+Handles authentication, CRUD, AI operations
+Uses Supabase PostgreSQL
+2. Core Library (src/ai_newsletter/): Shared business logic
+Reusable across backend, workers, and scripts
+Contains scrapers, generators, delivery logic
+Independent of FastAPI
+3. Frontend (Next.js): Port 3000
+Modern React with TypeScript
+10 API clients matching backend endpoints
+10 settings components for full feature coverage
+Does this match your understanding? Is there anything specific about the architecture you'd like to clarify?
+i am a beginner, explain this to me
+I'll explain your application architecture in beginner-friendly terms!
+What You've Built: AI Newsletter Platform
+Think of your application like a restaurant with three main parts:
+1. Backend = The Kitchen (Where the Work Happens)
+The backend/ folder is like a restaurant kitchen. It:
+Receives orders (API requests from the frontend)
+Prepares the food (processes data, generates newsletters)
+Stores ingredients (saves data to database)
+What's inside:
+main.py - The head chef that coordinates everything
+api/ - The order system (endpoints like /workspaces, /newsletters)
+services/ - The cooking stations (business logic)
+models/ - Recipe cards (database structure)
+worker.py - Background chef (handles scheduled tasks)
+Example: When you click "Generate Newsletter" on the website, the backend:
+Scrapes content from Reddit, RSS feeds, etc.
+Uses AI to write the newsletter
+Saves it to the database
+Sends it back to your screen
+2. src/ai_newsletter/ = The Appliances & Tools (Reusable Parts)
+This is like the kitchen appliances that can be used anywhere:
+Blender = scrapers/ (grabs content from websites)
+Oven = generators/ (AI cooks up newsletter content)
+Refrigerator = database/ (stores data)
+Delivery van = delivery/ (sends emails)
+Why separate? These tools can be used by:
+The backend API
+Command-line scripts (in examples/)
+Background workers
+Tests
+It's like having a portable blender you can use in the kitchen OR take camping!
+3. frontend-nextjs/ = The Dining Room (What Customers See)
+The frontend-nextjs/ folder is the beautiful dining room where customers interact:
+frontend-nextjs/
+├── app/
+│   ├── page.tsx          → Home page (welcome screen)
+│   ├── login/            → Login page
+│   ├── app/page.tsx      → Dashboard (control center)
+│   ├── app/settings/     → Settings page (10 sections)
+│   └── app/history/      → Past newsletters
+│
+├── components/
+│   ├── modals/           → Pop-up windows (send, schedule)
+│   ├── settings/         → 10 settings panels
+│   └── ui/               → Buttons, inputs, cards
+│
+└── lib/
+    ├── api/              → 10 API clients (talk to backend)
+    └── stores/           → Memory (logged-in user, workspace)
+How it works:
+User clicks "Send Newsletter" button
+Frontend calls deliveryApi.send() (in lib/api/delivery.ts)
+This sends a request to backend: POST /api/v1/delivery/send
+Backend processes it and responds
+Frontend shows "Success!" message
+How They Work Together (The Flow)
+Let's trace what happens when you create a newsletter:
+┌─────────────────────────────────────────────────────┐
+│ 1. USER                                             │
+│    Clicks "Generate Newsletter" on Dashboard        │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 2. FRONTEND (Next.js)                               │
+│    - Dashboard component                            │
+│    - Calls: newslettersApi.generate()              │
+│    - Sends: POST to backend                        │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 3. BACKEND (FastAPI)                                │
+│    - Receives request at /api/v1/newsletters/       │
+│    - Validates user is logged in                    │
+│    - Calls src/ai_newsletter/                       │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 4. CORE LOGIC (src/ai_newsletter/)                  │
+│    - scrapers/ → Grab content from Reddit, RSS      │
+│    - generators/ → Use AI to write newsletter       │
+│    - database/ → Save newsletter                    │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 5. DATABASE (Supabase PostgreSQL)                   │
+│    - Stores newsletter in "newsletters" table       │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 6. BACKEND → FRONTEND                               │
+│    - Returns: { id: "123", title: "...", ... }     │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 7. USER                                             │
+│    Sees newsletter appear on screen!                │
+└─────────────────────────────────────────────────────┘
+Key Concepts Explained
+What is an API?
+API = Application Programming Interface = A waiter that takes orders
+Frontend says: "Give me all newsletters"
+Backend responds: [{newsletter1}, {newsletter2}]
+They communicate using HTTP requests (GET, POST, PUT, DELETE)
+What are the 10 API Clients?
+These are helpers that make it easy to talk to the backend:
+// Instead of writing this every time:
+fetch('http://localhost:8000/api/v1/newsletters', {
+  method: 'GET',
+  headers: { 'Authorization': 'Bearer token123...' }
+})
+
+// You write this:
+newslettersApi.list()
+The 10 API clients (in frontend-nextjs/src/lib/api/):
+auth.ts - Login, register, logout
+workspaces.ts - Create/manage workspaces
+sources.ts - Add content sources (Reddit, RSS)
+content.ts - View scraped content
+newsletters.ts - Generate newsletters
+delivery.ts - Send emails
+subscribers.ts - Manage email list
+scheduler.ts - Schedule automated sends
+style.ts - Train AI writing style
+trends.ts - Detect trending topics
+analytics.ts - Track email opens/clicks
+feedback.ts - AI learning from feedback
+What is Supabase?
+Supabase = Your database storage = Like a filing cabinet It stores:
+Users (email, password hash)
+Workspaces (your different projects)
+Content (scraped articles)
+Newsletters (generated content)
+Subscribers (email list)
+Analytics (who opened emails)
+Why This Architecture?
+Separation of Concerns
+Backend = Handles complex logic, security, data
+Frontend = Handles user interface, looks pretty
+Core library = Reusable tools
+Benefits:
+You can change the UI without touching backend
+Multiple frontends could use the same backend (web app, mobile app)
+Tests are easier - test each part separately
+Team collaboration - Frontend dev and backend dev work independently
+Files You'll Edit Most Often
+When building features:
+Frontend (what users see):
+frontend-nextjs/src/app/app/page.tsx - Dashboard page
+frontend-nextjs/src/components/settings/*.tsx - Settings components
+frontend-nextjs/src/lib/api/*.ts - API calls
+Backend (logic & data):
+backend/api/v1/*.py - API endpoints
+backend/services/*.py - Business logic
+src/ai_newsletter/scrapers/*.py - Add new scrapers
+Running Your Application
+# Terminal 1: Start backend (kitchen)
+cd backend
+.venv/Scripts/python.exe -m uvicorn main:app --reload
+# Now running on http://localhost:8000
+
+# Terminal 2: Start frontend (dining room)
+cd frontend-nextjs
+npm run dev
+# Now running on http://localhost:3000
+Visit http://localhost:3000 → You see the frontend The frontend talks to http://localhost:8000 → Backend does the work
+Quick Analogy Summary
+Part	Real World	Your App
+Frontend	Restaurant dining room	Next.js UI (what you see)
+Backend	Restaurant kitchen	FastAPI server (where work happens)
+Core Library	Kitchen appliances	src/ai_newsletter/ (reusable tools)
+Database	Storage room	Supabase (stores all data)
+API	Waiter	HTTP requests between frontend/backend
+Does this make sense? What part would you like me to explain in more detail?
+so src can ideally also be a part of backend
+Exactly! You're thinking like a software architect now! 🎉 Yes, src/ai_newsletter/ could absolutely be inside backend/. Let me explain both approaches:
+Current Structure (Separated)
+scraper-scripts/
+├── backend/                    # FastAPI API layer
+├── src/ai_newsletter/          # Core business logic
+└── frontend-nextjs/            # UI
+Alternative Structure (Merged)
+scraper-scripts/
+├── backend/
+│   ├── api/                   # FastAPI endpoints
+│   ├── services/              # Business logic
+│   ├── ai_newsletter/         # <-- Moved here!
+│   │   ├── scrapers/
+│   │   ├── generators/
+│   │   └── delivery/
+│   └── main.py
+└── frontend-nextjs/
+Why Keep Them Separate? (Current Setup)
+1. Reusability Outside Backend
+Your src/ai_newsletter/ can be used independently:
+# Direct Python script (no backend needed)
+python examples/generate_newsletter.py
+
+# Command line tool
+python -m ai_newsletter.scrapers.reddit_scraper
+
+# Different backend (Django, Flask)
+from ai_newsletter.generators import NewsletterGenerator
+2. Different Deployment Scenarios
+Deploy backend API on one server
+Run scraper workers on different servers (heavy CPU/memory)
+Use CLI scripts locally for testing
+3. Package Distribution
+You could publish ai_newsletter as a library:
+pip install ai_newsletter
+# Others can use your scrapers in their projects!
+Why Merge Them? (Backend Structure)
+1. Simpler Mental Model
+For beginners, this is clearer:
+backend/          # Everything backend-related
+frontend-nextjs/  # Everything frontend-related
+2. Easier Imports
+# Current (separate):
+from src.ai_newsletter.scrapers import RedditScraper
+
+# Merged:
+from backend.ai_newsletter.scrapers import RedditScraper
+3. Single Deployment Unit
+If you only ever use these tools through the backend API, why separate them?
+When to Separate (Your Current Approach is Good If...)
+✅ You plan to use scrapers/generators outside the API
+✅ You want to publish it as a Python package later
+✅ You have multiple applications using the same logic
+✅ You want clear separation between "API layer" and "business logic"
+When to Merge (Consider If...)
+✅ You only access everything through the FastAPI backend
+✅ You're a solo developer and want simpler structure
+✅ You deploy everything together always
+✅ You prefer fewer top-level folders
+My Recommendation for You (As a Beginner)
+Keep it as-is for now because:
+Your examples/ folder uses it directly
+# examples/generate_newsletter.py
+from src.ai_newsletter.generators import NewsletterGenerator
+# This wouldn't work if inside backend/
+Backend is just one way to access it
+You have example scripts
+You have worker.py that runs separately
+You might want CLI tools later
+Good practice for larger projects
+Separating "framework" (FastAPI) from "business logic" (your scrapers/generators)
+Makes testing easier (test scrapers without starting the backend)
+Refactoring Exercise (If You Want to Merge Later)
+Here's how you'd merge them:
+# Move src/ai_newsletter/ into backend/
+mv src/ai_newsletter backend/ai_newsletter
+
+# Update all imports in backend:
+# FROM: from src.ai_newsletter.scrapers import ...
+# TO:   from backend.ai_newsletter.scrapers import ...
+
+# Move worker.py into backend:
+mv backend/worker.py backend/worker.py  # (already there)
+
+# Update examples to import from backend:
+# FROM: from src.ai_newsletter.generators import ...
+# TO:   from backend.ai_newsletter.generators import ...
+The Key Concept: Layered Architecture
+Your current structure follows layered architecture:
+┌─────────────────────────────────────┐
+│  Presentation Layer (Frontend)      │  <- Next.js
+├─────────────────────────────────────┤
+│  API Layer (Backend)                │  <- FastAPI
+├─────────────────────────────────────┤
+│  Business Logic (Core)              │  <- src/ai_newsletter/
+├─────────────────────────────────────┤
+│  Data Layer (Database)              │  <- Supabase
+└─────────────────────────────────────┘
+Each layer only talks to the layer below it. This is a professional pattern used by big companies!
+Summary
+Your current structure is actually good! Here's why:
+Current Setup	Benefit
+backend/ separate from src/	Backend is just an "API wrapper" around your core logic
+src/ai_newsletter/ as library	Can be reused in scripts, tests, other projects
+frontend-nextjs/ separate	Can be replaced with mobile app, keeps UI separate
+As a beginner, think of it this way:
+src/ai_newsletter/ = The engine of a car
+backend/ = The car's steering wheel and controls
+frontend-nextjs/ = The car's dashboard display
+The engine can be used in different cars (boats, planes), but right now it's in your car (backend)!

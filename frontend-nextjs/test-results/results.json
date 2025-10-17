@@ -1,0 +1,645 @@
+{
+  "config": {
+    "configFile": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\playwright.config.ts",
+    "rootDir": "E:/Career coaching/100x/scraper-scripts/frontend-nextjs/e2e",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        null
+      ],
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "E:/Career coaching/100x/scraper-scripts/frontend-nextjs/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "E:/Career coaching/100x/scraper-scripts/frontend-nextjs/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.56.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "journey-4-history-view.spec.ts",
+      "file": "journey-4-history-view.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Journey 4: Newsletter History",
+          "file": "journey-4-history-view.spec.ts",
+          "line": 11,
+          "column": 6,
+          "specs": [
+            {
+              "title": "4.1: Should display empty state when no newsletters sent",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 66901,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded while running \"beforeEach\" hook.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded while running \"beforeEach\" hook.\u001b[39m\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:17:8",
+                        "location": {
+                          "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                          "column": 8,
+                          "line": 17
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 15 |\u001b[39m   \u001b[36mlet\u001b[39m userId\u001b[33m:\u001b[39m string\u001b[33m;\u001b[39m\n \u001b[90m 16 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 17 |\u001b[39m   test\u001b[33m.\u001b[39mbeforeEach(\u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\n \u001b[90m    |\u001b[39m        \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 18 |\u001b[39m     helper \u001b[33m=\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mSupabaseTestHelper\u001b[39m()\u001b[33m;\u001b[39m\n \u001b[90m 19 |\u001b[39m     testEmail \u001b[33m=\u001b[39m \u001b[32m`history-test-${Date.now()}@example.com`\u001b[39m\u001b[33m;\u001b[39m\n \u001b[90m 20 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                            "column": 8,
+                            "line": 17
+                          },
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded while running \"beforeEach\" hook.\u001b[39m\n\n  15 |   let userId: string;\n  16 |\n> 17 |   test.beforeEach(async ({ page }) => {\n     |        ^\n  18 |     helper = new SupabaseTestHelper();\n  19 |     testEmail = `history-test-${Date.now()}@example.com`;\n  20 |\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:17:8"
+                        },
+                        {
+                          "location": {
+                            "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                            "column": 16,
+                            "line": 29
+                          },
+                          "message": "Error: page.waitForURL: Test timeout of 60000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation to \"/app\" until \"load\"\n============================================================\n\n  27 |\n  28 |     // Wait for redirect to dashboard\n> 29 |     await page.waitForURL('/app');\n     |                ^\n  30 |\n  31 |     // Get workspace ID from the page\n  32 |     await page.waitForTimeout(2000); // Wait for workspace creation\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:29:16"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[Cleanup] User history-test-1760663963574@example.com not found\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-10-17T01:19:23.247Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-9e844-te-when-no-newsletters-sent-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-9e844-te-when-no-newsletters-sent-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-9e844-te-when-no-newsletters-sent-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                        "column": 8,
+                        "line": 17
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "5027c363f2fc2ad8383b-8b75a3edfd51edf92b93",
+              "file": "journey-4-history-view.spec.ts",
+              "line": 55,
+              "column": 7
+            },
+            {
+              "title": "4.2: Should display sent newsletters from backend",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 17468,
+                      "error": {
+                        "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n",
+                        "stack": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38",
+                        "location": {
+                          "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                          "column": 38,
+                          "line": 23
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 21 |\u001b[39m     \u001b[90m// Register and login\u001b[39m\n \u001b[90m 22 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m'/register'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 23 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^name$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'History Test User'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 24 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/email/i\u001b[39m)\u001b[33m.\u001b[39mfill(testEmail)\u001b[33m;\u001b[39m\n \u001b[90m 25 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^password$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'testpass123'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 26 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByRole(\u001b[32m'button'\u001b[39m\u001b[33m,\u001b[39m { name\u001b[33m:\u001b[39m \u001b[35m/create account/i\u001b[39m })\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                            "column": 38,
+                            "line": 23
+                          },
+                          "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n\n  21 |     // Register and login\n  22 |     await page.goto('/register');\n> 23 |     await page.getByLabel(/^name$/i).fill('History Test User');\n     |                                      ^\n  24 |     await page.getByLabel(/email/i).fill(testEmail);\n  25 |     await page.getByLabel(/^password$/i).fill('testpass123');\n  26 |     await page.getByRole('button', { name: /create account/i }).click();\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[Cleanup] User history-test-1760664032855@example.com not found\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-10-17T01:20:32.386Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-1ba1c-nt-newsletters-from-backend-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-1ba1c-nt-newsletters-from-backend-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-1ba1c-nt-newsletters-from-backend-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                        "column": 38,
+                        "line": 23
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "5027c363f2fc2ad8383b-70c175c9ea5bc6939a9d",
+              "file": "journey-4-history-view.spec.ts",
+              "line": 68,
+              "column": 7
+            },
+            {
+              "title": "4.3: Should show loading state while fetching",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 12318,
+                      "error": {
+                        "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n",
+                        "stack": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38",
+                        "location": {
+                          "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                          "column": 38,
+                          "line": 23
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 21 |\u001b[39m     \u001b[90m// Register and login\u001b[39m\n \u001b[90m 22 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m'/register'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 23 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^name$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'History Test User'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 24 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/email/i\u001b[39m)\u001b[33m.\u001b[39mfill(testEmail)\u001b[33m;\u001b[39m\n \u001b[90m 25 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^password$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'testpass123'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 26 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByRole(\u001b[32m'button'\u001b[39m\u001b[33m,\u001b[39m { name\u001b[33m:\u001b[39m \u001b[35m/create account/i\u001b[39m })\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                            "column": 38,
+                            "line": 23
+                          },
+                          "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n\n  21 |     // Register and login\n  22 |     await page.goto('/register');\n> 23 |     await page.getByLabel(/^name$/i).fill('History Test User');\n     |                                      ^\n  24 |     await page.getByLabel(/email/i).fill(testEmail);\n  25 |     await page.getByLabel(/^password$/i).fill('testpass123');\n  26 |     await page.getByRole('button', { name: /create account/i }).click();\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[Cleanup] User history-test-1760664052590@example.com not found\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-10-17T01:20:52.084Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-f8eed-oading-state-while-fetching-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-f8eed-oading-state-while-fetching-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-f8eed-oading-state-while-fetching-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                        "column": 38,
+                        "line": 23
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "5027c363f2fc2ad8383b-c17dacd3c90801158d50",
+              "file": "journey-4-history-view.spec.ts",
+              "line": 97,
+              "column": 7
+            },
+            {
+              "title": "4.4: Should navigate to dashboard from empty state",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 12209,
+                      "error": {
+                        "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n",
+                        "stack": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38",
+                        "location": {
+                          "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                          "column": 38,
+                          "line": 23
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 21 |\u001b[39m     \u001b[90m// Register and login\u001b[39m\n \u001b[90m 22 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m'/register'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 23 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^name$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'History Test User'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 24 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/email/i\u001b[39m)\u001b[33m.\u001b[39mfill(testEmail)\u001b[33m;\u001b[39m\n \u001b[90m 25 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^password$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'testpass123'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 26 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByRole(\u001b[32m'button'\u001b[39m\u001b[33m,\u001b[39m { name\u001b[33m:\u001b[39m \u001b[35m/create account/i\u001b[39m })\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                            "column": 38,
+                            "line": 23
+                          },
+                          "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n\n  21 |     // Register and login\n  22 |     await page.goto('/register');\n> 23 |     await page.getByLabel(/^name$/i).fill('History Test User');\n     |                                      ^\n  24 |     await page.getByLabel(/email/i).fill(testEmail);\n  25 |     await page.getByLabel(/^password$/i).fill('testpass123');\n  26 |     await page.getByRole('button', { name: /create account/i }).click();\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[Cleanup] User history-test-1760664067227@example.com not found\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-10-17T01:21:06.725Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-717f6--dashboard-from-empty-state-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-717f6--dashboard-from-empty-state-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-717f6--dashboard-from-empty-state-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                        "column": 38,
+                        "line": 23
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "5027c363f2fc2ad8383b-f8a57a15ac1720dd4e73",
+              "file": "journey-4-history-view.spec.ts",
+              "line": 117,
+              "column": 7
+            },
+            {
+              "title": "4.5: Should display multiple newsletters in chronological order",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 11114,
+                      "error": {
+                        "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n",
+                        "stack": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38",
+                        "location": {
+                          "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                          "column": 38,
+                          "line": 23
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 21 |\u001b[39m     \u001b[90m// Register and login\u001b[39m\n \u001b[90m 22 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m'/register'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 23 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^name$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'History Test User'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 24 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/email/i\u001b[39m)\u001b[33m.\u001b[39mfill(testEmail)\u001b[33m;\u001b[39m\n \u001b[90m 25 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^password$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'testpass123'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 26 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByRole(\u001b[32m'button'\u001b[39m\u001b[33m,\u001b[39m { name\u001b[33m:\u001b[39m \u001b[35m/create account/i\u001b[39m })\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                            "column": 38,
+                            "line": 23
+                          },
+                          "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n\n  21 |     // Register and login\n  22 |     await page.goto('/register');\n> 23 |     await page.getByLabel(/^name$/i).fill('History Test User');\n     |                                      ^\n  24 |     await page.getByLabel(/email/i).fill(testEmail);\n  25 |     await page.getByLabel(/^password$/i).fill('testpass123');\n  26 |     await page.getByRole('button', { name: /create account/i }).click();\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[Cleanup] User history-test-1760664080685@example.com not found\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-10-17T01:21:20.403Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-9ef8f-ters-in-chronological-order-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-9ef8f-ters-in-chronological-order-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-9ef8f-ters-in-chronological-order-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                        "column": 38,
+                        "line": 23
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "5027c363f2fc2ad8383b-164c4f34ffa1440a87a7",
+              "file": "journey-4-history-view.spec.ts",
+              "line": 133,
+              "column": 7
+            },
+            {
+              "title": "4.6: Should only show sent newsletters (not drafts)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 11127,
+                      "error": {
+                        "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n",
+                        "stack": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38",
+                        "location": {
+                          "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                          "column": 38,
+                          "line": 23
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 21 |\u001b[39m     \u001b[90m// Register and login\u001b[39m\n \u001b[90m 22 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m'/register'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 23 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^name$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'History Test User'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 24 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/email/i\u001b[39m)\u001b[33m.\u001b[39mfill(testEmail)\u001b[33m;\u001b[39m\n \u001b[90m 25 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^password$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'testpass123'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 26 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByRole(\u001b[32m'button'\u001b[39m\u001b[33m,\u001b[39m { name\u001b[33m:\u001b[39m \u001b[35m/create account/i\u001b[39m })\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                            "column": 38,
+                            "line": 23
+                          },
+                          "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n\n  21 |     // Register and login\n  22 |     await page.goto('/register');\n> 23 |     await page.getByLabel(/^name$/i).fill('History Test User');\n     |                                      ^\n  24 |     await page.getByLabel(/email/i).fill(testEmail);\n  25 |     await page.getByLabel(/^password$/i).fill('testpass123');\n  26 |     await page.getByRole('button', { name: /create account/i }).click();\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[Cleanup] User history-test-1760664093143@example.com not found\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-10-17T01:21:32.839Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-b632a-ent-newsletters-not-drafts--chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-b632a-ent-newsletters-not-drafts--chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-b632a-ent-newsletters-not-drafts--chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                        "column": 38,
+                        "line": 23
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "5027c363f2fc2ad8383b-0210593276bda7ed735d",
+              "file": "journey-4-history-view.spec.ts",
+              "line": 172,
+              "column": 7
+            },
+            {
+              "title": "4.7: Should handle analytics not available gracefully",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 11113,
+                      "error": {
+                        "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n",
+                        "stack": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38",
+                        "location": {
+                          "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                          "column": 38,
+                          "line": 23
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 21 |\u001b[39m     \u001b[90m// Register and login\u001b[39m\n \u001b[90m 22 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m'/register'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 23 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^name$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'History Test User'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 24 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/email/i\u001b[39m)\u001b[33m.\u001b[39mfill(testEmail)\u001b[33m;\u001b[39m\n \u001b[90m 25 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByLabel(\u001b[35m/^password$/i\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'testpass123'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 26 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByRole(\u001b[32m'button'\u001b[39m\u001b[33m,\u001b[39m { name\u001b[33m:\u001b[39m \u001b[35m/create account/i\u001b[39m })\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                            "column": 38,
+                            "line": 23
+                          },
+                          "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel(/^name$/i)\u001b[22m\n\n\n  21 |     // Register and login\n  22 |     await page.goto('/register');\n> 23 |     await page.getByLabel(/^name$/i).fill('History Test User');\n     |                                      ^\n  24 |     await page.getByLabel(/email/i).fill(testEmail);\n  25 |     await page.getByLabel(/^password$/i).fill('testpass123');\n  26 |     await page.getByRole('button', { name: /create account/i }).click();\n    at E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts:23:38"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[Cleanup] User history-test-1760664105640@example.com not found\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-10-17T01:21:45.337Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-3947a-cs-not-available-gracefully-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-3947a-cs-not-available-gracefully-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\test-results\\journey-4-history-view-Jou-3947a-cs-not-available-gracefully-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "E:\\Career coaching\\100x\\scraper-scripts\\frontend-nextjs\\e2e\\journey-4-history-view.spec.ts",
+                        "column": 38,
+                        "line": 23
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "5027c363f2fc2ad8383b-71909b70adf0c9029d08",
+              "file": "journey-4-history-view.spec.ts",
+              "line": 204,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-10-17T01:19:21.817Z",
+    "duration": 154884.993,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 7,
+    "flaky": 0
+  }
+}

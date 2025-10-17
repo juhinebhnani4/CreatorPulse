@@ -56,6 +56,7 @@ class ContentItem:
         return {
             'title': self.title,
             'source': self.source,
+            'source_type': self.source,  # Added for frontend compatibility (same as source)
             'source_url': self.source_url,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'content': self.content,

@@ -1,0 +1,461 @@
+🔴 Critical Issues (Fix Before Build)
+1. Dashboard Primary Action is Confusing
+Problem: "Review & Send" button vs actual action flow
+
+User clicks "Review & Send"
+Goes to editor
+Then clicks "Send Now"
+Two-step process hidden in button label
+
+Fix:
+Change button label to: "Preview Draft" 
+Subtext: "Takes 30 seconds"
+
+OR 
+
+Better: Show draft preview RIGHT HERE on dashboard
+Then: [Edit] [Send Now] buttons visible immediately
+No second page load needed
+```
+
+**Why matters:** Users want ONE click to value. You're making them navigate twice.
+
+---
+
+### 2. **Settings Page Ordering Still Wrong (Frequency-Based)**
+**Problem:** Current order:
+1. Schedule (weekly)
+2. Sources (weekly) ← But listed 2nd
+3. Email (one-time)
+4. Subscribers (one-time)
+
+**Better order:**
+1. **Sources** (modify 2-3x per week) ← MOST FREQUENT
+2. **Schedule** (modify 1x per month)
+3. **Subscribers** (manage occasionally)
+4. **Email** (one-time setup)
+5. **API Keys** (one-time)
+6. **Workspace** (one-time)
+7. [FUTURE] Style, Trends, etc.
+
+**Why matters:** Power users waste time scrolling to add a source.
+
+---
+
+### 3. **No Quick Add Source from Dashboard**
+**Problem:** User sees "12 articles curated from Reddit"
+- Wants to add Twitter sources
+- Must go to Settings → Sources → Add Source
+- 3 clicks for common task
+
+**Fix:** Add this to dashboard:
+```
+📱 Your Sources
+✓ Reddit (r/MachineLearning) - 5 items
+✓ Hacker News - 4 items  
+✓ Twitter (@OpenAI) - 3 items
+[+ Add Source]  ← Right here on dashboard
+
+Click expands to add dialog
+Saves and re-fetches draft immediately
+```
+
+**Why matters:** Most frequent task should be easiest.
+
+---
+
+### 4. **Draft Editor is a Full Page Load**
+**Problem:** User clicks "Preview Draft" → navigates to /draft/[id] → sees preview
+- Too many steps
+- Unnecessary page transition
+- Slow perceived performance
+
+**Fix:** Use a **Modal instead**
+```
+User on dashboard clicks "Preview Draft"
+↓
+Modal slides up
+Shows full draft
+[Edit sections inline]
+[Send Now] button
+[Close] dismisses
+
+User stays in flow
+No page navigation
+Faster perceived performance
+```
+
+**Why matters:** Modal = instant, modal = modern, modal = less cognitive load.
+
+---
+
+### 5. **Missing Inline Editing Interaction**
+**Problem:** "Inline editable newsletter preview" mentioned in spec
+- But prototype shows read-only preview
+- Users need to click-to-edit each item
+- Need clear visual indicators
+
+**Fix:** On hover, show edit UI:
+```
+📌 GPT-4 Turbo Hits New Reasoning Milestone
+[Hover: pencil icon appears]
+
+Click pencil:
+[x] Close editor
+[Headline field] (pre-filled)
+[Summary field] (pre-filled)
+[Link field]
+[Save] button
+
+After save: Re-render with new text, show "✓ Saved"
+```
+
+**Why matters:** Users expect edit-in-place. Make it obvious with hover states.
+
+---
+
+### 6. **No Empty State for First-Time Users**
+**Problem:** New user lands on dashboard
+- No draft yet (scheduled for 8 AM tomorrow)
+- Sees empty card
+- Doesn't know what to do
+
+**Fix:** Add welcome flow:
+```
+✓ Your first newsletter arrives tomorrow at 8 AM
+
+In the meantime, let's set up your sources:
+
+[Reddit] [Twitter] [YouTube] [RSS Feeds]
+Pick any 3 to get started →
+
+After selection:
+"Great! Check back tomorrow morning for your draft"
+```
+
+**Why matters:** New users need guidance. Don't leave them hanging.
+
+---
+
+### 7. **Auto-Save Not Clear Enough**
+**Problem:** "✓ Auto-saved at 2:45 PM" - but when?
+- Every keystroke? (feels slow)
+- Every 5 seconds? (unclear)
+- On blur? (hidden)
+
+**Fix:** Be explicit:
+```
+Status bar at bottom:
+
+[Draft] [Status] [Timestamp]
+"Saving..." → "Saved at 2:45 PM ✓"
+
+Show update every time:
+User edits → "Saving..." (50ms) → "Saved ✓"
+
+Keyboard shortcut:
+Cmd/Ctrl+S = manual save confirmation
+"Saved! Ready to send anytime"
+```
+
+**Why matters:** Users must know their work isn't lost.
+
+---
+
+## 🟡 High Priority Issues
+
+### 8. **Newsletter Preview Isn't Mobile Optimized**
+**Problem:** Desktop preview shows desktop rendering
+- Users will read on phone
+- But preview shows desktop version
+- Creates mismatch
+
+**Fix:**
+```
+Add toggle: [Desktop] [Mobile]
+
+Default to mobile (375px width)
+Show how it ACTUALLY looks in email client
+
+Users want: "Will this look good on phone?"
+Answer visible immediately
+```
+
+**Why matters:** Most readers open email on mobile. Show that.
+
+---
+
+### 9. **Subject Line Hidden**
+**Problem:** Draft shows full newsletter but NO subject line visible
+- Subject is critical for open rates
+- Should be editable
+- Should be prominent
+
+**Fix:**
+```
+At top of preview:
+
+[Subject Line]
+Daily AI Digest - October 15
+
+Clicking on subject = inline editor
+Pre-fill with AI-generated option
+Show character count (good for email)
+```
+
+**Why matters:** Subject line IS the newsletter (for email).
+
+---
+
+### 10. **No Trending Topics Editing**
+**Problem:** "🔥 Trending Now" section shows 3 topics
+- But users can't edit/remove them
+- Can't change commentary
+- Feels locked
+
+**Fix:**
+```
+Trending section with edit mode:
+
+🔥 AI Safety [✏️ Edit] [✕ Remove]
+[✓ Include this topic]
+
+Click edit:
+[Topic name] (editable)
+[Commentary] (editable textarea)
+[Save]
+
+After: Updates preview live
+```
+
+**Why matters:** Users want control. Don't lock content.
+
+---
+
+### 11. **Schedule Send Option Missing**
+**Problem:** Only "Send Now" button exists
+- But users want: "Schedule for 2 PM" or "Send tomorrow"
+- Required for common use case
+
+**Fix:**
+```
+Primary: [Send Now]
+Dropdown: [Send Later ▼]
+  - Send in 1 hour
+  - Send tomorrow at 8 AM
+  - Schedule for [custom time picker]
+```
+
+**Why matters:** Users are busy. Scheduling = retention.
+
+---
+
+### 12. **Regenerate Button UX Unclear**
+**Problem:** "Regenerate" button - but what happens?
+- Does it regenerate EVERYTHING?
+- Just sources?
+- Just trending?
+- Shows loading state?
+
+**Fix:** Be specific:
+```
+Dropdown: [Regenerate ▼]
+  - Regenerate all sections
+  - Regenerate headlines only
+  - Refresh sources only
+  - Refresh trending topics
+
+Shows: "Regenerating... 10 seconds"
+Loading state visible
+Preview updates in place
+```
+
+**Why matters:** Unclear actions = confused users = support tickets.
+
+---
+
+## 🟠 Medium Priority Issues
+
+### 13. **History Page Stats Are Vague**
+**Problem:** "34% open rate" - but compared to what?
+- Is this good?
+- Trending up or down?
+- How to improve?
+
+**Fix:**
+```
+Newsletter card shows:
+
+Daily AI Digest - Oct 14
+34% open rate ↑ +3% from last week
+12 clicks ↓ -2 from last week
+2 unsubscribes
+
+Trend indicator (↑↓) with delta
+Shows performance at a glance
+```
+
+**Why matters:** Users want to know: "Is this working?"
+
+---
+
+### 14. **No Loading States**
+**Problem:** When draft is generating, what does user see?
+- Blank screen?
+- Spinner?
+- Skeleton loader?
+
+**Fix:**
+```
+Dashboard loading state:
+
+[Header]
+[Skeleton: short line]
+[Skeleton: medium line]
+[Skeleton: 3 article boxes fading in]
+
+Shows: "Generating your draft... 45 seconds"
+Estimated time visible
+```
+
+**Why matters:** Users hate blank screens. Show progress.
+
+---
+
+### 15. **Settings Not Searchable**
+**Problem:** User wants to "find email settings"
+- Must scroll through accordions
+- No search/filter
+
+**Fix:** Add search box:
+```
+Search Settings
+[Search field]
+
+User types "email" 
+↓
+Shows only Email Configuration accordion (expanded)
+Highlights search term
+
+User types "schedule"
+↓
+Shows Schedule accordion (expanded)
+```
+
+**Why matters:** Power users can skip scrolling. Faster.
+
+---
+
+### 16. **No Keyboard Shortcuts**
+**Problem:** Keyboard users must use mouse
+- Tab through everything
+- No Cmd+S to save
+- No Escape to close
+
+**Fix:**
+```
+Add shortcuts:
+Cmd/Ctrl+Enter = Send Newsletter
+Cmd/Ctrl+S = Save Draft
+Escape = Close modal/back to dashboard
+Tab = Navigate form fields
+```
+
+**Why matters:** Power users expect this. Shows polish.
+
+---
+
+### 17. **Sources List Not Editable on Dashboard**
+**Problem:** Users see sources but can't modify without Settings
+- "3 sources" is static
+- Want to disable Reddit temporarily
+- Must go to Settings
+
+**Fix:**
+```
+Dashboard shows sources:
+
+✓ Reddit (r/MachineLearning) [✕ Pause]
+✓ Hacker News [✕ Pause]
+✓ Twitter [@OpenAI] [✕ Pause]
+
+Click [✕ Pause]:
+"Paused for 24 hours" 
+Regenerates draft without this source
+Can unpause anytime
+```
+
+**Why matters:** Users want quick control. Don't make them navigate away.
+
+---
+
+### 18. **No "Send Test Email" Clarity**
+**Problem:** Button exists but unclear what it does
+- Sends to who?
+- What address?
+- When do they receive it?
+
+**Fix:**
+```
+[Send Test Email ▼]
+"Send a preview to: [your-email@example.com]"
+Success message: "Test email sent! Check your inbox in 30 seconds"
+Why matters: Users need to know: action → result.
+
+🟢 Nice-to-Have (Post-Launch)
+19. Undo/Redo for Draft Edits
+20. Bookmark favorite sources
+21. AI suggestions for headline improvements
+22. Subscriber analytics (who opened, who clicked)
+23. A/B test subject lines
+24. Recurring newsletters (weekly digest)
+
+Summary: Top 5 Must Fix Before Launch
+PriorityIssueImpact🔴Dashboard primary action unclearUsers confused about flow🔴Settings ordering wrongPower users frustrated🔴Draft editor should be modal, not pageSlower perceived speed🟡No inline editing interaction designUnclear how to edit🟡Missing schedule send optionCommon use case broken
+
+React/Next.js Implementation Tips
+For Modal (Instead of Full Page):
+tsx// Good: Use React Hook (Zustand or context)
+const [showDraftModal, setShowDraftModal] = useState(false);
+
+<button onClick={() => setShowDraftModal(true)}>
+  Preview Draft
+</button>
+
+{showDraftModal && (
+  <DraftModal 
+    onClose={() => setShowDraftModal(false)}
+    onSend={handleSend}
+  />
+)}
+For Inline Editing:
+tsx// Good: Track edit mode per item
+const [editingItemId, setEditingItemId] = useState(null);
+
+{items.map(item => (
+  editingItemId === item.id ? (
+    <EditForm item={item} onSave={handleSave} />
+  ) : (
+    <div onMouseEnter={() => setEditingItemId(item.id)}>
+      {item.content}
+      [pencil icon]
+    </div>
+  )
+))}
+For Auto-Save:
+tsx// Good: Use useEffect + debounce
+const handleEdit = (newContent) => {
+  setContent(newContent);
+  setStatus('Saving...');
+  
+  // Debounce API call (500ms)
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    await api.saveDraft(content);
+    setStatus(`Saved at ${formatTime()}`);
+  }, 500);
+};
+
+Build This, Not What You Have Now
+The prototype is 80% right. But these 18 issues compound into a mediocre UX.
+Better first: Fix the 5 critical issues → Better second: Re-show prototype → Better final: Start building.

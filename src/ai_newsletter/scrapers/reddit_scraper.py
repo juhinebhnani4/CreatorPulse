@@ -141,7 +141,7 @@ class RedditScraper(BaseScraper):
             source_url=permalink,
             created_at=created_utc,
             content=selftext if selftext else None,
-            summary=selftext[:200] + '...' if len(selftext) > 200 else selftext,
+            summary=self._generate_summary(raw_item),
             author=author,
             author_url=f"{self.base_url}/user/{author}" if author != '[deleted]' else None,
             score=score,
@@ -161,8 +161,53 @@ class RedditScraper(BaseScraper):
                 'awards': raw_item.get('total_awards_received', 0),
             }
         )
-        
+
         return item
+
+    def _generate_summary(self, raw_item: Dict[str, Any]) -> str:
+        """
+        Generate smart summary for Reddit post with intelligent fallbacks.
+
+        Fallback chain:
+        1. Selftext (if available)
+        2. Post type description + title preview
+        3. Title only
+
+        Args:
+            raw_item: Raw post data from Reddit API
+
+        Returns:
+            Descriptive summary string (never empty)
+        """
+        selftext = raw_item.get('selftext', '').strip()
+        title = raw_item.get('title', '')
+        is_self = raw_item.get('is_self', False)
+        url = raw_item.get('url', '')
+        post_hint = raw_item.get('post_hint', '')
+        domain = raw_item.get('domain', '')
+
+        # Priority 1: Use selftext if available
+        if selftext:
+            return selftext[:200] + '...' if len(selftext) > 200 else selftext
+
+        # Priority 2: Describe post type + title preview
+        title_preview = title[:100] + '...' if len(title) > 100 else title
+
+        # Detect post type and create descriptive summary
+        if post_hint == 'image' or 'i.redd.it' in url or 'imgur.com' in url:
+            return f"Image: {title_preview}"
+
+        if post_hint == 'hosted:video' or 'v.redd.it' in url:
+            return f"Video: {title_preview}"
+
+        if 'youtube.com' in url or 'youtu.be' in url:
+            return f"YouTube Video: {title_preview}"
+
+        if not is_self and url:
+            return f"Link ({domain}): {title_preview}"
+
+        # Fallback: Just use title
+        return title[:200] + '...' if len(title) > 200 else title if title else "Reddit post"
     
     def fetch_subreddit(self, subreddit: str, limit: int = 25, **kwargs) -> List[ContentItem]:
         """

@@ -1,0 +1,285 @@
+CreatorPulse Design Rules for Claude Code
+Core Principles (5 Rules)
+
+One Primary Action Per Screen - Exactly 1 prominent button. Max 3 secondary buttons. Unlimited text links.
+Progressive Disclosure - Hide advanced options by default. Show only what user needs NOW.
+User Tasks Not Features - Organize by "Review Draft" not "Newsletter Generator Tab"
+Action-First Design - Primary action visible above fold. User knows what to do in <5 seconds.
+Fail Gracefully - Always show something. Partial success > total failure. Clear recovery paths.
+
+
+Information Architecture (3 Rules)
+
+Two-Screen Core Flow - Daily Dashboard → Draft Review. Everything else in Settings.
+Settings = One Page - All configuration consolidated. Organized by frequency of use.
+Max 3 Visible Tabs - If you need more, use accordions or single settings page.
+
+
+Button Hierarchy (4 Rules)
+
+Primary Button - Blue, 16px, bold, min-width 140px. One per screen.
+Secondary Buttons - White with border, 14px. Max 3 per screen.
+Tertiary Actions - Text links only. Unlimited. Bottom/header placement.
+Button Placement - Secondary left, Primary right. Bottom of content or top-right.
+
+
+Layout Standards (4 Rules)
+
+F-Pattern - Status top-left → Content center-left → Action bottom → Stats below fold → Links footer.
+Above Fold - Must show: headline, primary content preview, primary action button.
+Mobile First - Design for 375px, scale up. Touch targets ≥44px.
+Consistent Spacing - 8px base unit. 16px sections, 24px major gaps, 32px screen margins.
+
+
+Content & Copy (4 Rules)
+
+Clear Actions - "Send Newsletter" not "Submit". "Add Reddit Source" not "Add".
+Helpful Errors - "Reddit unavailable. Using other sources." not "Error 503".
+Show Progress - "Generating... 5 sec" not just spinner. Estimated time for >10sec ops.
+Human Numbers - "1.2K subscribers" not "1,234". "2 hours ago" not timestamps.
+
+
+States & Feedback (4 Rules)
+
+Four States Always - Loading (>300ms), Error (with action), Empty (with CTA), Success.
+Loading Types - Inline spinner (<3s), Full-screen (3-10s), Progress bar (>10s).
+Status Indicators - Green=success, Red=error, Yellow=warning, Blue=info. With icon + label.
+Inline Validation - Real-time feedback. No "submit to see errors".
+
+
+User Flows (4 Rules)
+
+Onboarding ≤3 Steps - Show value first (sample draft), then configure. <3 minutes total.
+Daily Flow <20min - Dashboard → Preview draft → Edit → Send. No unnecessary stops.
+No Confirmations - "Are you sure?" only for destructive/irreversible actions.
+Auto-Save Everything - Never lose user work. Save on change, not on submit.
+
+
+Accessibility (3 Rules)
+
+Keyboard Nav - Tab order logical. Enter=primary action. Escape=close modal.
+WCAG AA Contrast - 4.5:1 normal text. 3:1 large text (18px+). Never remove focus indicators.
+Screen Reader - Semantic HTML. Alt text on images. ARIA labels on icons.
+
+
+Component Standards (3 Rules)
+
+Use Library Only - ButtonPrimary, ButtonSecondary, Input, Select, Switch, Card, Accordion, StatusBadge, Toast, Modal.
+No Custom Buttons - Don't create new button styles. Use primary/secondary/tertiary only.
+Consistent Patterns - Same component = same behavior everywhere. No surprises.
+
+
+What NOT To Do (8 Rules)
+
+❌ Multiple equal-weight buttons
+❌ Technical jargon exposed (AI model names, API endpoints)
+❌ Generic errors ("Something went wrong")
+❌ Vague labels ("Submit", "OK", "Done")
+❌ Feature-based navigation ("Content Scraper", "Email Delivery")
+❌ Configuration in main flow (put in Settings)
+❌ Stats before actions (action first, metrics second)
+❌ Advanced options always visible (collapse by default)
+
+
+Validation Checklist (Quick)
+Before building ANY feature, check:
+
+✓ Exactly 1 primary button visible
+✓ User task clear in <5 seconds
+✓ Advanced options collapsed
+✓ All 4 states handled (loading/error/empty/success)
+✓ Mobile works at 375px
+✓ Keyboard accessible
+✓ Using library components only
+
+
+Remember: If user asks "what do I do next?" you failed. The primary action should be obvious.RetryJNgreat. and how does the newsletter look? can we talk about that? and what about aesthetics? keep it short but quality.Newsletter Design Rules
+Layout Structure (3 Rules)
+
+Hierarchy - Logo/Title → Intro (2-3 lines) → Curated Items (3-5) → Trending Section → Footer
+Scannable - Headlines bold 18px, summaries 14px gray, links blue underlined
+Mobile-First - Single column, no side-by-side. 600px max width.
+
+
+Content Blocks (4 Rules)
+
+Each Item - 📌 Emoji/icon → Bold headline → 2-3 line summary → "Read more →" link
+Trending Block - "🔥 Trending Now" header → 3 topics max → Why it matters (1 line each)
+Spacing - 24px between items, 40px between sections, 16px paragraph spacing
+CTAs - One primary CTA max. Blue button, centered, "Read Full Article" not "Click Here"
+
+
+Aesthetics (6 Rules)
+
+Color Palette - White background, #1a1a1a text, #0066cc links, #666666 metadata
+Typography - Sans-serif (Arial/Helvetica). 16px body, 18px headlines, 14px metadata
+No Clutter - White space is your friend. Line height 1.6. Paragraph spacing 16px.
+Visual Breaks - Thin horizontal lines (1px, #e0e0e0) between sections. Not between items.
+Images Optional - Only if high-quality and relevant. 600px wide max, centered, 16px margin.
+Branding Subtle - Small logo top (40px high). Footer: unsubscribe + social (gray, 12px).
+
+
+Voice & Tone (3 Rules)
+
+User's Voice - Match their past newsletters. Professional = formal. Casual = conversational.
+Commentary Style - "This matters because..." not "I think...". Insights not opinions.
+Headlines - Actionable ("How to..." "Why...") or curiosity ("The surprising..."). Never clickbait.
+
+
+Email-Specific (4 Rules)
+
+Subject Line - "Daily AI Digest - Oct 15" or "[Niche] Weekly Roundup #47". Date/number always.
+Preview Text - First 50 chars matter. "12 articles on AI coding, GPT-4 updates, and..." not "Hi there!"
+Plain Text Fallback - Always include. Some readers disable HTML.
+Footer Required - Unsubscribe (legal), view in browser, contact. 12px gray.
+
+
+Quality Markers (Good vs Bad)
+✅ Good Newsletter:
+
+Scans in 30 seconds
+3-5 meaty items (not 20 shallow ones)
+Clear "why this matters" for each item
+Consistent voice throughout
+One clear takeaway per item
+
+❌ Bad Newsletter:
+
+Wall of text
+Generic summaries ("Interesting article about...")
+Clickbait headlines
+Inconsistent formatting
+No white space
+
+
+Template Structure (Copy This)
+[Small Logo - 40px]
+
+Daily [Niche] Digest
+October 15, 2025
+
+Hi [Name],
+
+[2-3 line intro with today's theme]
+
+──────────────────
+
+📌 [Headline 1]
+[2-3 line summary with key insight]
+→ Read more: [link]
+
+📌 [Headline 2]
+[2-3 line summary with key insight]
+→ Read more: [link]
+
+📌 [Headline 3]
+[2-3 line summary with key insight]
+→ Read more: [link]
+
+──────────────────
+
+🔥 Trending Now
+
+- [Topic 1] - [Why it matters in 1 line]
+- [Topic 2] - [Why it matters in 1 line]  
+- [Topic 3] - [Why it matters in 1 line]
+
+──────────────────
+
+[Optional: One sentence CTA]
+[Button: "Explore More"]
+
+──────────────────
+
+That's all for today!
+[Sign-off]
+
+Unsubscribe | View in browser | Contact
+
+Key Insight: Great newsletters feel like a smart friend sharing finds, not a robot dumping links.RetryClaude does not have the ability to run the code it generates yet.JNwhat pages should we have and how many? you are the expertCreatorPulse Pages (Optimal Structure)
+Core Pages (3 Total)
+1. Home / Today's Draft
+
+URL: / (default landing after login)
+Purpose: Show draft status + send
+Frequency: Daily
+Key Element: Big "Review & Send" button
+
+2. Draft Editor
+
+URL: /draft or /draft/[date]
+Purpose: Review, edit, send newsletter
+Frequency: Daily
+Key Element: Inline editing + "Send Now" button
+
+3. Settings
+
+URL: /settings
+Purpose: All configuration (sources, schedule, email, style)
+Frequency: Weekly or less
+Key Element: Accordions for each section
+
+
+Optional Pages (2 Total)
+4. History (Optional but recommended)
+
+URL: /history
+Purpose: Past newsletters for reference
+Frequency: Occasional
+Key Element: List with search/filter
+
+5. Onboarding (First-time only)
+
+URL: /welcome (redirects to / after completion)
+Purpose: Initial setup
+Frequency: Once
+Key Element: 3-step wizard
+
+
+What NOT to Have
+❌ Separate "Content Scraper" page
+❌ Separate "Newsletter Generator" page
+❌ Separate "Email Delivery" page
+❌ Separate "Scheduler" page
+❌ "Dashboard" with just stats
+❌ "Profile" page (put in Settings)
+❌ "Billing" page (put in Settings → Billing section)
+These are system features, not user tasks. Hide them in Settings or backend.
+
+Navigation Structure
+Primary (always visible):
+├─ 📨 Today's Draft (/)
+
+Secondary (header/footer):
+├─ ⚙️ Settings (/settings)
+└─ 📚 History (/history)
+
+Hidden:
+└─ 👋 Welcome (/welcome) - only for first-time users
+```
+
+---
+
+## Page Count by User Type
+
+**Solo Creator:** 3 pages (Home, Editor, Settings)
+**Agency/Power User:** 5 pages (+ History, + Team management in Settings)
+
+---
+
+**Golden Rule: If you can't explain why a page exists in one user task sentence, delete it.**
+
+---
+
+## Routing Logic
+```
+User lands on app:
+├─ First time? → /welcome
+├─ Draft ready? → / (shows "Review & Send")
+├─ No draft yet? → / (shows "Draft arrives at 8 AM")
+└─ Clicked email link? → /draft (direct to editor)
+
+Settings button → /settings
+History link → /history
+
+Total: 3 core pages. 5 max. Any more means you're feature-focused, not user-focused.

@@ -1,22 +1,52 @@
 # Core dependencies
-streamlit==1.28.1
-requests==2.31.0
-pandas==2.1.3
-python-dateutil==2.8.2
+streamlit
+requests
+pandas
+python-dateutil
+python-dotenv
 
 # RSS/Feed parsing
-feedparser==6.0.10
+feedparser
 
 # Web scraping
-beautifulsoup4==4.12.2
-lxml==4.9.3
+beautifulsoup4
+lxml
+trafilatura  # Robust article content extraction
+extruct  # Metadata extraction (JSON-LD, Open Graph, etc.)
 
 # Optional: Twitter/X support (install separately if needed)
 # tweepy==4.14.0
 
+# CreatorPulse MVP dependencies
+google-api-python-client
+openai
+apscheduler
+sendgrid
+
+# Supabase Integration (includes postgrest, realtime, storage3 automatically)
+supabase>=2.0.0
+psycopg2-binary>=2.9.9
+
+# Database Migrations
+alembic>=1.17.0
+SQLAlchemy>=2.0.0
+
+# Authentication
+python-jose[cryptography]>=3.3.0
+passlib>=1.7.4
+
+# Style Training & Trends Detection
+nltk>=3.8.0
+textstat>=0.7.3
+scikit-learn>=1.3.0
+numpy>=1.24.0
+
+# Analytics
+Pillow>=10.0.0
+
 # Development dependencies (install with: pip install -e ".[dev]")
-# pytest==7.4.3
-# pytest-cov==4.1.0
-# black==23.11.0
-# flake8==6.1.0
-# mypy==1.7.1
+# pytest
+# pytest-cov
+# black
+# flake8
+# mypy
