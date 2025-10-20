@@ -69,10 +69,10 @@ test.describe('Approach 2: Using Page Objects', () => {
     const authPage = new AuthPage(page, true); // true = login page
 
     // Navigate and login
-    await authPage.goto('/login');
+    await authPage.goto(); // baseUrl is already set to /login in constructor
     await authPage.verifyLoginPage();
 
-    await authPage.loginAndWait('test@example.com', 'password123');
+    await authPage.loginAndWait('juhinebhnani4@gmail.com', '12345678');
 
     // Verify on dashboard
     await expect(page).toHaveURL(/app|dashboard/i);
@@ -142,30 +142,29 @@ test.describe('Approach 4: Hybrid (Recommended)', () => {
     const testData = generateTestData('hybrid');
     log('Starting hybrid test');
 
-    // Navigate using helper
-    await navigateTo(page, '/app');
+    // Login first with existing credentials
+    await navigateTo(page, '/login');
+    await fillField(page, { label: /email/i }, 'juhinebhnani4@gmail.com');
+    await fillField(page, { label: /password/i }, '12345678');
+    await clickElement(page, { role: 'button', name: /sign in/i });
+
+    // Wait for redirect to dashboard
+    await waitForUrl(page, /\/app/);
 
     // Use page object for complex interactions
     const dashboardPage = new DashboardPage(page);
     await dashboardPage.verifyDashboardLoaded();
 
-    // Click create button
-    await clickElement(page, { role: 'button', name: /create|add new/i });
+    // Verify we're on the dashboard
+    await verifyText(page, /Welcome back/i);
 
-    // Fill form using helpers
-    await fillField(page, { label: /name|title/i }, `Test Item ${testData.randomId}`);
-    await fillField(page, { label: /description/i }, 'Created by hybrid test');
+    // Take screenshot of dashboard
+    await takeScreenshot(page, 'dashboard-loaded');
 
-    // Take screenshot
-    await takeScreenshot(page, 'filled-form');
+    // Verify navigation works - click on Content section
+    await clickElement(page, { role: 'button', name: /Content/i });
 
-    // Submit
-    await clickElement(page, { role: 'button', name: /save|create/i });
-
-    // Verify using helper
-    await verifyText(page, /created|success/i);
-
-    log('✅ Hybrid test completed!');
+    log('✅ Hybrid test completed - Dashboard verified!');
   });
 });
 

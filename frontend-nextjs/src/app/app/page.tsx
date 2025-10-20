@@ -22,6 +22,7 @@ import { WelcomeSection } from '@/components/dashboard/welcome-section';
 import { EnhancedDraftCard } from '@/components/dashboard/enhanced-draft-card';
 import { UnifiedSourceSetup } from '@/components/dashboard/unified-source-setup';
 import { MotivationalTip } from '@/components/dashboard/motivational-tip';
+import { WorkspaceManagement } from '@/components/dashboard/workspace-management';
 import { DraftEditorModal } from '@/components/modals/draft-editor-modal';
 import { SendConfirmationModal } from '@/components/modals/send-confirmation-modal';
 import { AddSourceModal } from '@/components/modals/add-source-modal';
@@ -113,12 +114,52 @@ export default function DashboardPage() {
 
         if (!workspaces || workspaces.length === 0) {
           // Create a default workspace
-          const newWorkspace = await workspacesApi.create({
-            name: 'My Workspace',
-            description: 'Default workspace',
-          });
-          setWorkspaceData(newWorkspace);
-          setCurrentWorkspace(newWorkspace);
+          try {
+            const newWorkspace = await workspacesApi.create({
+              name: `${user?.username || 'My'} Workspace`,
+              description: 'Default workspace',
+            });
+            setWorkspaceData(newWorkspace);
+            setCurrentWorkspace(newWorkspace);
+
+            toast({
+              title: '✓ Workspace Created',
+              description: 'Your workspace is ready to use',
+            });
+          } catch (error: any) {
+            console.error('Workspace creation error:', error);
+
+            // If workspace already exists or creation failed, try fetching again
+            if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
+              console.log('[Dashboard] Workspace might already exist, retrying fetch...');
+              try {
+                const retryWorkspaces = await workspacesApi.list();
+                if (retryWorkspaces && retryWorkspaces.length > 0) {
+                  console.log('[Dashboard] Found existing workspace:', retryWorkspaces[0]);
+                  setWorkspaceData(retryWorkspaces[0]);
+                  setCurrentWorkspace(retryWorkspaces[0]);
+
+                  toast({
+                    title: 'Workspace Loaded',
+                    description: 'Using your existing workspace',
+                  });
+                } else {
+                  throw new Error('No workspace found after retry');
+                }
+              } catch (retryError) {
+                console.error('Retry fetch failed:', retryError);
+                throw error; // Re-throw original error
+              }
+            } else {
+              // Different error - show to user
+              toast({
+                title: 'Workspace Creation Failed',
+                description: error.message || 'Failed to create workspace',
+                variant: 'destructive',
+              });
+              throw error;
+            }
+          }
         } else {
           // Use first workspace or current workspace from store
           const ws = currentWorkspace
@@ -513,6 +554,24 @@ export default function DashboardPage() {
               tweet_limit: 10,
             },
           };
+        } else if (source.type === 'youtube') {
+          return {
+            type: 'youtube',
+            enabled: true,
+            config: {
+              channel_ids: [source.value],
+              video_limit: 10,
+            },
+          };
+        } else if (source.type === 'blog') {
+          return {
+            type: 'blog',
+            enabled: true,
+            config: {
+              urls: [source.value],
+              article_limit: 10,
+            },
+          };
         }
         return null;
       }).filter(Boolean);
@@ -540,9 +599,15 @@ export default function DashboardPage() {
         handleScrapeContent();
       }, 1000);
 
-      setTimeout(() => {
-        handleGenerateNow();
-      }, 3000);
+      // Auto-generate with default settings after scraping completes
+      setTimeout(async () => {
+        await handleGenerateWithSettings({
+          tone: 'professional',
+          maxItems: 15,
+          includeTrends: true,
+          language: 'en',
+        });
+      }, 5000);
 
     } catch (error: any) {
       console.error('Failed to add sources:', error);
@@ -630,6 +695,20 @@ export default function DashboardPage() {
             <UnifiedSourceSetup
               onSourcesAdded={handleUnifiedSourcesAdded}
               isLoading={isLoading}
+            />
+          )}
+
+          {/* Workspace Management - Available for both individual and agency users */}
+          {!isLoading && (
+            <WorkspaceManagement
+              onWorkspaceCreated={async () => {
+                // Refresh workspace list
+                const workspaces = await workspacesApi.list();
+                if (workspaces && workspaces.length > 0) {
+                  setWorkspaceData(workspaces[workspaces.length - 1]);
+                  setCurrentWorkspace(workspaces[workspaces.length - 1]);
+                }
+              }}
             />
           )}
 

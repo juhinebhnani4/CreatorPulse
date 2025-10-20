@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { authApi } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/stores/auth-store';
 
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const setUser = useAuthStore((state) => state.setUser);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +24,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    console.log('[LoginPage] Submitting login form');
+    console.log('[LoginPage] Submitting login form', { rememberMe });
 
     try {
       const response = await authApi.login({ email, password });
@@ -36,6 +38,16 @@ export default function LoginPage() {
       };
 
       setUser(user);
+
+      // Handle remember me - store in localStorage if checked
+      if (rememberMe) {
+        localStorage.setItem('rememberMe', 'true');
+        localStorage.setItem('userEmail', email);
+      } else {
+        localStorage.removeItem('rememberMe');
+        localStorage.removeItem('userEmail');
+      }
+
       console.log('[LoginPage] User state updated, redirecting to /app');
       router.push('/app');
     } catch (err: any) {
@@ -64,9 +76,9 @@ export default function LoginPage() {
             <CardDescription>Sign in to your account to continue</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
               {error && (
-                <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md" data-testid="login-error">
                   {error}
                 </div>
               )}
@@ -83,6 +95,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={loading}
+                  data-testid="email-input"
                 />
               </div>
 
@@ -98,10 +111,36 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={loading}
+                  data-testid="password-input"
                 />
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="remember-me"
+                    checked={rememberMe}
+                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                    disabled={loading}
+                    data-testid="remember-me-checkbox"
+                  />
+                  <label
+                    htmlFor="remember-me"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Remember me
+                  </label>
+                </div>
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-primary hover:underline"
+                  data-testid="forgot-password-link"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+
+              <Button type="submit" className="w-full" disabled={loading} data-testid="login-button">
                 {loading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>

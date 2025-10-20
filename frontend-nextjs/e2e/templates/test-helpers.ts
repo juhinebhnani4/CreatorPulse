@@ -176,15 +176,49 @@ export async function findElement(
 
 /**
  * Click element with automatic retry
+ * Supports multiple selector types:
+ * - String CSS selector: 'button.submit'
+ * - Playwright Locator: page.getByRole('button')
+ * - findElement options: { role: 'button', name: /submit/i }
  */
 export async function clickElement(
   page: Page,
-  selector: string | Locator,
+  selector: string | Locator | {
+    role?: string;
+    name?: string | RegExp;
+    text?: string | RegExp;
+    label?: string | RegExp;
+    placeholder?: string | RegExp;
+    testId?: string;
+    css?: string;
+    exact?: boolean;
+  },
   options: { timeout?: number; force?: boolean; retry?: number } = {}
 ): Promise<void> {
   const { timeout = 10000, force = false, retry = 3 } = options;
-  const locator = typeof selector === 'string' ? page.locator(selector) : selector;
 
+  // Validate selector
+  if (!selector) {
+    throw new Error('clickElement: selector is required');
+  }
+
+  // Resolve selector to Locator
+  let locator: Locator;
+
+  if (typeof selector === 'string') {
+    // String CSS selector
+    locator = page.locator(selector);
+  } else if (typeof selector === 'object' && 'click' in selector && typeof selector.click === 'function') {
+    // Already a Locator
+    locator = selector;
+  } else if (typeof selector === 'object') {
+    // findElement options object
+    locator = await findElement(page, selector);
+  } else {
+    throw new Error(`clickElement: Invalid selector type. Expected string, Locator, or findElement options, got ${typeof selector}`);
+  }
+
+  // Retry clicking
   for (let i = 0; i < retry; i++) {
     try {
       await locator.click({ timeout, force });
@@ -198,15 +232,40 @@ export async function clickElement(
 
 /**
  * Fill field with validation
+ * Supports multiple selector types:
+ * - String CSS selector: 'input[name="email"]'
+ * - Playwright Locator: page.getByLabel('Email')
+ * - findElement options: { label: /email/i }
  */
 export async function fillField(
   page: Page,
-  selector: string | Locator,
+  selector: string | Locator | {
+    role?: string;
+    name?: string | RegExp;
+    text?: string | RegExp;
+    label?: string | RegExp;
+    placeholder?: string | RegExp;
+    testId?: string;
+    css?: string;
+    exact?: boolean;
+  },
   value: string,
   options: { timeout?: number; verify?: boolean } = {}
 ): Promise<void> {
   const { timeout = 10000, verify = true } = options;
-  const locator = typeof selector === 'string' ? page.locator(selector) : selector;
+
+  // Resolve selector to Locator
+  let locator: Locator;
+
+  if (typeof selector === 'string') {
+    locator = page.locator(selector);
+  } else if (typeof selector === 'object' && 'fill' in selector && typeof selector.fill === 'function') {
+    locator = selector;
+  } else if (typeof selector === 'object') {
+    locator = await findElement(page, selector);
+  } else {
+    throw new Error(`fillField: Invalid selector type, got ${typeof selector}`);
+  }
 
   await locator.fill(value, { timeout });
 
@@ -277,13 +336,34 @@ export async function wait(ms: number): Promise<void> {
 
 /**
  * Wait for element to be visible
+ * Supports multiple selector types
  */
 export async function waitForVisible(
   page: Page,
-  selector: string | Locator,
+  selector: string | Locator | {
+    role?: string;
+    name?: string | RegExp;
+    text?: string | RegExp;
+    label?: string | RegExp;
+    placeholder?: string | RegExp;
+    testId?: string;
+    css?: string;
+    exact?: boolean;
+  },
   timeout: number = 30000
 ): Promise<void> {
-  const locator = typeof selector === 'string' ? page.locator(selector) : selector;
+  let locator: Locator;
+
+  if (typeof selector === 'string') {
+    locator = page.locator(selector);
+  } else if (typeof selector === 'object' && 'click' in selector) {
+    locator = selector;
+  } else if (typeof selector === 'object') {
+    locator = await findElement(page, selector);
+  } else {
+    throw new Error(`waitForVisible: Invalid selector type, got ${typeof selector}`);
+  }
+
   await expect(locator).toBeVisible({ timeout });
 }
 
@@ -364,13 +444,33 @@ export async function waitForCondition(
 
 /**
  * Verify element is visible
+ * Supports multiple selector types
  */
 export async function verifyVisible(
   page: Page,
-  selector: string | Locator,
+  selector: string | Locator | {
+    role?: string;
+    name?: string | RegExp;
+    text?: string | RegExp;
+    label?: string | RegExp;
+    placeholder?: string | RegExp;
+    testId?: string;
+    css?: string;
+    exact?: boolean;
+  },
   shouldBeVisible: boolean = true
 ): Promise<void> {
-  const locator = typeof selector === 'string' ? page.locator(selector) : selector;
+  let locator: Locator;
+
+  if (typeof selector === 'string') {
+    locator = page.locator(selector);
+  } else if (typeof selector === 'object' && 'click' in selector) {
+    locator = selector;
+  } else if (typeof selector === 'object') {
+    locator = await findElement(page, selector);
+  } else {
+    throw new Error(`verifyVisible: Invalid selector type, got ${typeof selector}`);
+  }
 
   if (shouldBeVisible) {
     await expect(locator).toBeVisible();

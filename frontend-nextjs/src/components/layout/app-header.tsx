@@ -1,24 +1,36 @@
 'use client';
 
 import { useRouter, usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { authApi } from '@/lib/api/auth';
-import { Home, Settings, History, Users, ChevronDown, FileText, CalendarClock } from 'lucide-react';
+import { workspacesApi } from '@/lib/api/workspaces';
+import { Home, Settings, ChevronDown, FileText, Building2, Check } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
+import { Workspace } from '@/types/workspace';
 
 export function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, clearAuth } = useAuthStore();
-  const { currentWorkspace } = useWorkspaceStore();
+  const { currentWorkspace, setCurrentWorkspace } = useWorkspaceStore();
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+
+  // Fetch user's workspaces
+  useEffect(() => {
+    if (user) {
+      workspacesApi.list().then(setWorkspaces).catch(console.error);
+    }
+  }, [user]);
 
   const handleLogout = () => {
     authApi.logout();
@@ -26,12 +38,15 @@ export function AppHeader() {
     router.push('/login');
   };
 
+  const handleWorkspaceSwitch = (workspace: Workspace) => {
+    setCurrentWorkspace(workspace);
+    // Reload current page to refresh data with new workspace
+    router.refresh();
+  };
+
   const navItems = [
     { href: '/app', label: 'Dashboard', icon: Home },
     { href: '/app/content', label: 'Content', icon: FileText },
-    { href: '/app/subscribers', label: 'Subscribers', icon: Users },
-    { href: '/app/schedule', label: 'Schedule', icon: CalendarClock },
-    { href: '/app/history', label: 'History', icon: History },
     { href: '/app/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -84,10 +99,60 @@ export function AppHeader() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            {/* Current Workspace (if available) */}
-            {currentWorkspace && (
-              <div className="hidden sm:block text-sm text-muted-foreground">
-                {currentWorkspace.name}
+            {/* Workspace Switcher (for agency users with multiple workspaces) */}
+            {workspaces.length > 1 && currentWorkspace && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="default"
+                    className="gap-2 rounded-xl border-primary/20 hover:border-primary/40 transition-colors"
+                    data-testid="workspace-switcher"
+                  >
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <span className="hidden sm:inline font-medium max-w-[120px] truncate">
+                      {currentWorkspace.name}
+                    </span>
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="text-xs uppercase text-muted-foreground">
+                    Switch Workspace
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {workspaces.map((workspace) => (
+                    <DropdownMenuItem
+                      key={workspace.id}
+                      onClick={() => handleWorkspaceSwitch(workspace)}
+                      className="flex items-center justify-between cursor-pointer"
+                      data-testid={`workspace-option-${workspace.id}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4" />
+                        <div>
+                          <p className="font-medium">{workspace.name}</p>
+                          {workspace.description && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                              {workspace.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {currentWorkspace.id === workspace.id && (
+                        <Check className="h-4 w-4 text-primary" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
+            {/* Current Workspace Label (for single workspace users) */}
+            {workspaces.length === 1 && currentWorkspace && (
+              <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground px-3 py-2 rounded-xl bg-muted/50">
+                <Building2 className="h-4 w-4" />
+                <span className="font-medium">{currentWorkspace.name}</span>
               </div>
             )}
 

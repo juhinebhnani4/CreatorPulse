@@ -8,7 +8,7 @@ import { Lightbulb, Sparkles, ArrowRight } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 
 interface ParsedSource {
-  type: 'reddit' | 'rss' | 'twitter';
+  type: 'reddit' | 'rss' | 'twitter' | 'youtube' | 'blog';
   value: string;
   icon: string;
   displayName: string;
@@ -85,21 +85,27 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false }: Unifie
       };
     }
 
-    // RSS Feed: http(s)://...
+    // RSS Feed: http(s)://... with /feed or /rss in path
     if (/^https?:\/\/.+/i.test(trimmed)) {
       // Ignore non-content URLs
       if (shouldIgnoreUrl(trimmed)) {
         return null;
       }
 
-      const cleanDomain = cleanRssUrl(trimmed);
-      return {
-        type: 'rss',
-        value: trimmed,
-        icon: '📰',
-        displayName: cleanDomain,
-        description: 'Latest updates',
-      };
+      // Check if it's explicitly an RSS feed (has /feed, /rss, .xml, .rss in URL)
+      const isRssFeed = /\/(feed|rss|atom)|\.xml|\.rss/i.test(trimmed);
+
+      if (isRssFeed) {
+        const cleanDomain = cleanRssUrl(trimmed);
+        return {
+          type: 'rss',
+          value: trimmed,
+          icon: '📰',
+          displayName: cleanDomain,
+          description: 'RSS feed',
+        };
+      }
+      // If not explicitly RSS, continue to check for other types
     }
 
     // Twitter: @username or #hashtag
@@ -121,6 +127,37 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false }: Unifie
         displayName: trimmed,
         description: 'Trending hashtag',
       };
+    }
+
+    // YouTube: UC channel IDs (24 characters starting with UC)
+    if (/^UC[\w-]{22}$/i.test(trimmed)) {
+      return {
+        type: 'youtube',
+        value: trimmed,
+        icon: '🎥',
+        displayName: `YouTube Channel`,
+        description: 'Latest videos',
+      };
+    }
+
+    // YouTube: youtube.com URLs
+    if (/youtube\.com\/(channel|c|user)\//i.test(trimmed)) {
+      try {
+        const url = new URL(trimmed);
+        const pathMatch = url.pathname.match(/\/(channel|c|user)\/([^/?]+)/);
+        if (pathMatch) {
+          const channelId = pathMatch[2];
+          return {
+            type: 'youtube',
+            value: channelId,
+            icon: '🎥',
+            displayName: channelId,
+            description: 'YouTube channel',
+          };
+        }
+      } catch {
+        // Invalid URL, ignore
+      }
     }
 
     return null;
@@ -161,10 +198,19 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false }: Unifie
     const redditCount = sources.filter(s => s.type === 'reddit').length;
     const rssCount = sources.filter(s => s.type === 'rss').length;
     const twitterCount = sources.filter(s => s.type === 'twitter').length;
+    const youtubeCount = sources.filter(s => s.type === 'youtube').length;
+    const blogCount = sources.filter(s => s.type === 'blog').length;
+
+    const parts = [];
+    if (redditCount > 0) parts.push(`${redditCount} Reddit`);
+    if (rssCount > 0) parts.push(`${rssCount} RSS`);
+    if (twitterCount > 0) parts.push(`${twitterCount} Twitter`);
+    if (youtubeCount > 0) parts.push(`${youtubeCount} YouTube`);
+    if (blogCount > 0) parts.push(`${blogCount} Blog`);
 
     toast({
       title: '✓ Sources Detected',
-      description: `Found ${redditCount} Reddit, ${rssCount} RSS, ${twitterCount} Twitter sources`,
+      description: `Found ${parts.join(', ')} source${sources.length !== 1 ? 's' : ''}`,
     });
 
     onSourcesAdded(sources);
@@ -201,6 +247,22 @@ https://blog.openai.com/feed
       badge: '⚡ Real-time',
       example: '@ylecun',
     },
+    {
+      id: 'youtube',
+      icon: '🎥',
+      name: 'YouTube',
+      description: 'Channels & videos',
+      badge: '📹 Video content',
+      example: 'UC_x5XG1OV2P6uZZ5FSM9Ttw',
+    },
+    {
+      id: 'blog',
+      icon: '✍️',
+      name: 'Blog',
+      description: 'Custom blogs',
+      badge: '📝 Text content',
+      example: 'https://example.com/blog',
+    },
   ];
 
   const handleCardClick = (example: string) => {
@@ -222,7 +284,7 @@ https://blog.openai.com/feed
           </div>
 
           {/* Source Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {sourceCards.map((source, index) => (
               <button
                 key={source.id}

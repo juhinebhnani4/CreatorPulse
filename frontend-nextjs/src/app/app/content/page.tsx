@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/lib/hooks/use-toast';
 import { Loader2, Search, RefreshCw, ThumbsUp, ThumbsDown, ExternalLink, Calendar, User } from 'lucide-react';
 import { AppHeader } from '@/components/layout/app-header';
+import { Thumbnail } from '@/components/ui/thumbnail';
+import { feedbackApi } from '@/lib/api/feedback';
 
 export default function ContentPage() {
   const router = useRouter();
@@ -49,7 +51,14 @@ export default function ContentPage() {
   }, [isAuthenticated, isMounted, _hasHydrated, currentWorkspace, sourceFilter, daysFilter]);
 
   const fetchData = async () => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace) {
+      console.warn('[Content] No workspace selected');
+      setIsLoading(false);
+      setItems([]);
+      setTotal(0);
+      setStats(null);
+      return;
+    }
 
     try {
       setIsLoading(true);
@@ -123,8 +132,80 @@ export default function ContentPage() {
     item.content.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Source icon and color helpers
+  const getSourceIcon = (source: string) => {
+    const icons: Record<string, string> = {
+      'reddit': '🔴',
+      'rss': '🟠',
+      'twitter': '🔵',
+      'x': '🔵',
+      'youtube': '🟢',
+      'blog': '🟣'
+    };
+    return icons[source.toLowerCase()] || '📄';
+  };
+
+  const getSourceColor = (source: string) => {
+    const colors: Record<string, 'destructive' | 'default' | 'secondary' | 'outline'> = {
+      'reddit': 'destructive',
+      'rss': 'secondary',
+      'twitter': 'default',
+      'x': 'default',
+      'youtube': 'outline',
+      'blog': 'secondary'
+    };
+    return colors[source.toLowerCase()] || 'default';
+  };
+
+  // Feedback handler
+  const handleFeedback = async (itemId: string, rating: 'positive' | 'negative') => {
+    if (!currentWorkspace) return;
+
+    try {
+      await feedbackApi.submitFeedback({
+        workspace_id: currentWorkspace.id,
+        content_item_id: itemId,
+        rating: rating === 'positive' ? 5 : 1,
+        feedback_type: 'content_quality'
+      });
+
+      toast({
+        title: '✓ Feedback Recorded',
+        description: 'We\'ll use this to improve future curation',
+        duration: 2000
+      });
+    } catch (error: any) {
+      console.error('Failed to submit feedback:', error);
+      toast({
+        title: 'Feedback Failed',
+        description: error.message || 'Failed to record feedback',
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (!isMounted || !_hasHydrated) {
     return null;
+  }
+
+  // Show workspace error if no workspace selected
+  if (!currentWorkspace) {
+    return (
+      <div className="min-h-screen bg-muted/20">
+        <AppHeader />
+        <main className="container mx-auto px-4 py-8 max-w-7xl">
+          <Card className="p-12 text-center">
+            <h2 className="text-2xl font-semibold mb-2">No Workspace Selected</h2>
+            <p className="text-muted-foreground mb-6">
+              Please refresh the page or select a workspace to view content
+            </p>
+            <Button onClick={() => router.push('/app')} className="bg-gradient-warm hover:opacity-90">
+              Go to Dashboard
+            </Button>
+          </Card>
+        </main>
+      </div>
+    );
   }
 
   return (
@@ -255,26 +336,40 @@ export default function ContentPage() {
               {filteredItems.map((item, index) => (
                 <Card
                   key={item.id}
-                  className="p-6 shadow-md hover:shadow-lg transition-shadow animate-slide-up"
+                  data-testid="content-card"
+                  data-item-id={item.id}
+                  data-source={item.source_type}
+                  className="overflow-hidden shadow-md hover:shadow-lg transition-shadow animate-slide-up"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="flex-1">
+                  <div className="flex gap-4">
+                    {/* Thumbnail */}
+                    {item.image_url && (
+                      <Thumbnail
+                        src={item.image_url}
+                        alt={item.title}
+                        source={item.source_type}
+                        className="w-48 h-32 object-cover flex-shrink-0"
+                      />
+                    )}
+
+                    {/* Content */}
+                    <div className="flex-1 p-6 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
-                        <Badge variant="secondary" className="uppercase text-xs">
-                          {item.source_type}
+                        <Badge variant={getSourceColor(item.source_type)} className="text-xs" data-testid="source-badge">
+                          {getSourceIcon(item.source_type)} {item.source_type}
                         </Badge>
                         {item.score && item.score > 0 && (
                           <Badge variant="outline" className="text-xs">
-                            Score: {item.score}
+                            ⬆ {item.score}
                           </Badge>
                         )}
                       </div>
 
                       <h3 className="text-lg font-semibold mb-2 hover:text-primary transition-colors">
                         <a href={item.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
-                          {item.title}
-                          <ExternalLink className="h-4 w-4" />
+                          <span className="line-clamp-1">{item.title}</span>
+                          <ExternalLink className="h-4 w-4 flex-shrink-0" />
                         </a>
                       </h3>
 
@@ -282,27 +377,43 @@ export default function ContentPage() {
                         {item.content}
                       </p>
 
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        {item.author && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          {item.author && (
+                            <div className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              <span className="truncate max-w-[150px]">{item.author}</span>
+                            </div>
+                          )}
                           <div className="flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {item.author}
+                            <Calendar className="h-3 w-3" />
+                            {new Date(item.published_at).toLocaleDateString()}
                           </div>
-                        )}
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {new Date(item.published_at).toLocaleDateString()}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-success gap-1"
+                            onClick={() => handleFeedback(item.id, 'positive')}
+                            data-testid="feedback-keep-button"
+                          >
+                            <ThumbsUp className="h-4 w-4" />
+                            Keep
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-destructive gap-1"
+                            onClick={() => handleFeedback(item.id, 'negative')}
+                            data-testid="feedback-skip-button"
+                          >
+                            <ThumbsDown className="h-4 w-4" />
+                            Skip
+                          </Button>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-success">
-                        <ThumbsUp className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-destructive">
-                        <ThumbsDown className="h-4 w-4" />
-                      </Button>
                     </div>
                   </div>
                 </Card>

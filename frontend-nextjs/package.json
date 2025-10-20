@@ -14,6 +14,9 @@
     "test:e2e:journey1": "playwright test journey-1-user-onboarding",
     "test:e2e:journey2": "playwright test journey-2-content-sources",
     "test:e2e:journey3": "playwright test journey-3-newsletter-generation",
+    "test:e2e:mvp-individual": "playwright test e2e/journey-mvp-individual-user.spec.ts",
+    "test:e2e:mvp-agency": "playwright test e2e/journey-mvp-agency-user.spec.ts",
+    "test:e2e:mvp-all": "playwright test e2e/journey-mvp-individual-user.spec.ts e2e/journey-mvp-agency-user.spec.ts",
     "test:e2e:report": "playwright show-report",
     "test:e2e:codegen": "playwright codegen http://localhost:3000"
   },
