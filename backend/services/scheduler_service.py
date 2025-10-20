@@ -10,7 +10,6 @@ This service handles:
 
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-import logging
 
 from backend.models.scheduler import (
     SchedulerJobCreate,
@@ -19,27 +18,20 @@ from backend.models.scheduler import (
     SchedulerExecutionResponse,
     SchedulerExecutionStats
 )
-from src.ai_newsletter.database.supabase_client import SupabaseManager
+from backend.services.base_service import BaseService
 from backend.utils.error_handling import handle_service_errors, NotFoundError
+from backend.config.constants import SchedulerConstants
 
-logger = logging.getLogger(__name__)
 
-
-class SchedulerService:
+class SchedulerService(BaseService):
     """Service for managing scheduled jobs."""
 
-    def __init__(self):
-        self._db: Optional[SupabaseManager] = None
-
-    @property
-    def db(self) -> SupabaseManager:
-        """Lazy-load Supabase client."""
-        if self._db is None:
-            self._db = SupabaseManager()
-        return self._db
+    def __init__(self, db=None):
+        """Initialize scheduler service with dependency injection."""
+        super().__init__(db)
 
     @handle_service_errors(default_return=None, raise_on_error=True)
-    async def create_job(self, user_id: str, request: SchedulerJobCreate) -> Dict[str, Any]:
+    async def create_job(self, user_id: str, request: SchedulerJobCreate) -> SchedulerJobResponse:
         """
         Create a new scheduled job.
 
@@ -48,13 +40,13 @@ class SchedulerService:
             request: Job creation request
 
         Returns:
-            Dict with created job details
+            SchedulerJobResponse with created job details
 
         Raises:
             NotFoundError: If workspace not found
             Exception: If creation fails
         """
-        logger.info(f"Creating job '{request.name}' for workspace {request.workspace_id}")
+        self.logger.info(f"Creating job '{request.name}' for workspace {request.workspace_id}")
 
         # Validate workspace access
         workspace = self.db.get_workspace(request.workspace_id)
@@ -80,12 +72,12 @@ class SchedulerService:
 
         # Create job in database
         job = self.db.create_scheduler_job(job_data)
-        logger.info(f"Job created successfully: {job.get('id')}")
+        self.logger.info(f"Job created successfully: {job.get('id')}")
 
-        return job
+        return SchedulerJobResponse(**job)
 
     @handle_service_errors(default_return=[], raise_on_error=False)
-    async def list_jobs(self, user_id: str, workspace_id: str) -> List[Dict[str, Any]]:
+    async def list_jobs(self, user_id: str, workspace_id: str) -> List[SchedulerJobResponse]:
         """
         List all jobs for a workspace.
 
@@ -94,15 +86,16 @@ class SchedulerService:
             workspace_id: Workspace ID to filter jobs
 
         Returns:
-            List of jobs (empty list on error)
+            List of SchedulerJobResponse objects (empty list on error)
         """
-        logger.info(f"Listing jobs for workspace {workspace_id}")
+        self.logger.info(f"Listing jobs for workspace {workspace_id}")
         # RLS ensures user can only see their workspaces
         jobs = self.db.list_scheduler_jobs(workspace_id)
-        logger.info(f"Found {len(jobs)} jobs for workspace {workspace_id}")
-        return jobs
+        self.logger.info(f"Found {len(jobs)} jobs for workspace {workspace_id}")
+        return [SchedulerJobResponse(**job) for job in jobs]
 
-    async def get_job(self, user_id: str, job_id: str) -> Dict[str, Any]:
+    @handle_service_errors(default_return=None, raise_on_error=True)
+    async def get_job(self, user_id: str, job_id: str) -> SchedulerJobResponse:
         """
         Get job details.
 
@@ -111,28 +104,29 @@ class SchedulerService:
             job_id: Job ID
 
         Returns:
-            Job details
+            SchedulerJobResponse with job details
 
         Raises:
-            Exception: If job not found or access denied
+            NotFoundError: If job not found or access denied
         """
         job = self.db.get_scheduler_job(job_id)
         if not job:
-            raise Exception(f"Job {job_id} not found")
+            raise NotFoundError(f"Job {job_id} not found")
 
         # Verify user has access to this workspace
         workspace = self.db.get_workspace(job['workspace_id'])
         if not workspace:
-            raise Exception("Access denied")
+            raise NotFoundError("Access denied")
 
-        return job
+        return SchedulerJobResponse(**job)
 
+    @handle_service_errors(default_return=None, raise_on_error=True)
     async def update_job(
         self,
         user_id: str,
         job_id: str,
         request: SchedulerJobUpdate
-    ) -> Dict[str, Any]:
+    ) -> SchedulerJobResponse:
         """
         Update existing job.
 
@@ -142,12 +136,12 @@ class SchedulerService:
             request: Update request
 
         Returns:
-            Updated job details
+            SchedulerJobResponse with updated job details
 
         Raises:
-            Exception: If job not found or access denied
+            NotFoundError: If job not found or access denied
         """
-        # Get existing job
+        # Get existing job (validates access)
         job = await self.get_job(user_id, job_id)
 
         # Prepare updates (only include non-None fields)
@@ -159,8 +153,9 @@ class SchedulerService:
         # Update job
         updated_job = self.db.update_scheduler_job(job_id, updates)
 
-        return updated_job
+        return SchedulerJobResponse(**updated_job)
 
+    @handle_service_errors(default_return=False, raise_on_error=True)
     async def delete_job(self, user_id: str, job_id: str) -> bool:
         """
         Delete a job.
@@ -173,7 +168,7 @@ class SchedulerService:
             True if deleted successfully
 
         Raises:
-            Exception: If job not found or access denied
+            NotFoundError: If job not found or access denied
         """
         # Verify access
         await self.get_job(user_id, job_id)
@@ -183,7 +178,8 @@ class SchedulerService:
 
         return success
 
-    async def pause_job(self, user_id: str, job_id: str) -> Dict[str, Any]:
+    @handle_service_errors(default_return=None, raise_on_error=True)
+    async def pause_job(self, user_id: str, job_id: str) -> SchedulerJobResponse:
         """
         Pause a job.
 
@@ -192,7 +188,7 @@ class SchedulerService:
             job_id: Job ID to pause
 
         Returns:
-            Updated job details
+            SchedulerJobResponse with updated job details
         """
         # Verify access
         await self.get_job(user_id, job_id)
@@ -204,9 +200,10 @@ class SchedulerService:
         }
         updated_job = self.db.update_scheduler_job(job_id, updates)
 
-        return updated_job
+        return SchedulerJobResponse(**updated_job)
 
-    async def resume_job(self, user_id: str, job_id: str) -> Dict[str, Any]:
+    @handle_service_errors(default_return=None, raise_on_error=True)
+    async def resume_job(self, user_id: str, job_id: str) -> SchedulerJobResponse:
         """
         Resume a paused job.
 
@@ -215,7 +212,7 @@ class SchedulerService:
             job_id: Job ID to resume
 
         Returns:
-            Updated job details
+            SchedulerJobResponse with updated job details
         """
         # Verify access
         await self.get_job(user_id, job_id)
@@ -227,7 +224,7 @@ class SchedulerService:
         }
         updated_job = self.db.update_scheduler_job(job_id, updates)
 
-        return updated_job
+        return SchedulerJobResponse(**updated_job)
 
     async def trigger_job_now(
         self,
@@ -273,36 +270,41 @@ class SchedulerService:
             "message": "Job execution started" if not test_mode else "Job execution started in test mode"
         }
 
+    @handle_service_errors(default_return=[], raise_on_error=False)
     async def get_execution_history(
         self,
         user_id: str,
         job_id: str,
-        limit: int = 50
-    ) -> List[Dict[str, Any]]:
+        limit: int = None
+    ) -> List[SchedulerExecutionResponse]:
         """
         Get execution history for a job.
 
         Args:
             user_id: User ID requesting history
             job_id: Job ID
-            limit: Maximum number of executions to return
+            limit: Maximum number of executions to return (default from constants)
 
         Returns:
-            List of executions ordered by started_at DESC
+            List of SchedulerExecutionResponse objects ordered by started_at DESC
         """
+        if limit is None:
+            limit = SchedulerConstants.DEFAULT_EXECUTION_HISTORY_LIMIT
+
         # Verify access
         await self.get_job(user_id, job_id)
 
         # Get execution history
         executions = self.db.get_scheduler_executions(job_id, limit)
 
-        return executions
+        return [SchedulerExecutionResponse(**execution) for execution in executions]
 
+    @handle_service_errors(default_return=None, raise_on_error=True)
     async def get_execution_stats(
         self,
         user_id: str,
         job_id: str
-    ) -> Dict[str, Any]:
+    ) -> SchedulerExecutionStats:
         """
         Get execution statistics for a job.
 
@@ -311,34 +313,34 @@ class SchedulerService:
             job_id: Job ID
 
         Returns:
-            Dict with execution statistics
+            SchedulerExecutionStats with execution statistics
         """
         # Verify access
         job = await self.get_job(user_id, job_id)
 
         # Calculate success rate
-        total = job.get('total_runs', 0)
-        successful = job.get('successful_runs', 0)
-        failed = job.get('failed_runs', 0)
+        total = job.total_runs or 0
+        successful = job.successful_runs or 0
+        failed = job.failed_runs or 0
         success_rate = (successful / total * 100) if total > 0 else 0
 
         # Get recent executions for avg duration
         executions = await self.get_execution_history(user_id, job_id, limit=10)
         avg_duration = None
         if executions:
-            durations = [e['duration_seconds'] for e in executions if e.get('duration_seconds')]
+            durations = [e.duration_seconds for e in executions if e.duration_seconds]
             if durations:
                 avg_duration = sum(durations) / len(durations)
 
-        stats = {
-            "total_executions": total,
-            "successful": successful,
-            "failed": failed,
-            "partial": total - successful - failed,
-            "success_rate": round(success_rate, 2),
-            "avg_duration_seconds": round(avg_duration, 2) if avg_duration else None,
-            "last_execution_at": job.get('last_run_at')
-        }
+        stats = SchedulerExecutionStats(
+            total_executions=total,
+            successful=successful,
+            failed=failed,
+            partial=total - successful - failed,
+            success_rate=round(success_rate, 2),
+            avg_duration_seconds=round(avg_duration, 2) if avg_duration else None,
+            last_execution_at=job.last_run_at
+        )
 
         return stats
 
