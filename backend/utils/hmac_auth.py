@@ -11,6 +11,8 @@ import time
 from typing import Optional
 from fastapi import HTTPException, Header, status
 
+from backend.config.constants import AnalyticsConstants
+
 
 def generate_tracking_token(
     newsletter_id: str,
@@ -51,7 +53,7 @@ def verify_tracking_token(
     newsletter_id: str,
     workspace_id: str,
     secret_key: str,
-    max_age_seconds: int = 86400 * 30  # 30 days default
+    max_age_seconds: int = AnalyticsConstants.TOKEN_EXPIRY_SECONDS
 ) -> bool:
     """
     Verify HMAC token for analytics tracking.

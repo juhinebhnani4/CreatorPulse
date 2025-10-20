@@ -17,6 +17,7 @@ from src.ai_newsletter.config.settings import get_settings
 from backend.services.trend_service import TrendDetectionService
 from backend.services.style_service import StyleAnalysisService
 from backend.services.feedback_service import FeedbackService
+from backend.config.constants import NewsletterConstants
 
 
 class NewsletterService:
@@ -71,7 +72,7 @@ class NewsletterService:
         # Fetch active trends for this workspace
         trends = await self.trend_service.get_active_trends(
             workspace_id=UUID(workspace_id),
-            limit=5
+            limit=NewsletterConstants.MAX_TRENDS_TO_FETCH
         )
 
         # Fetch style profile for this workspace
@@ -84,7 +85,7 @@ class NewsletterService:
             workspace_id=workspace_id,
             days=days_back,
             source=sources[0] if sources and len(sources) == 1 else None,
-            limit=max_items * 2  # Fetch more for filtering
+            limit=max_items * NewsletterConstants.CONTENT_FETCH_MULTIPLIER  # Fetch more for filtering
         )
 
         if not content_items:
@@ -102,7 +103,7 @@ class NewsletterService:
             apply_preferences=True
         )
 
-        # Boost content related to active trends (30% score increase)
+        # Boost content related to active trends
         if trends:
             trend_keywords = set()
             for trend in trends:
@@ -112,10 +113,10 @@ class NewsletterService:
                 # Check if item is related to any trend
                 item_text = (item.get('title', '') + ' ' + item.get('summary', '')).lower()
                 if any(keyword in item_text for keyword in trend_keywords):
-                    # Boost score by 30%
+                    # Boost score using configured multiplier
                     item['trend_boosted'] = True
                     item['original_score'] = item.get('score', 0)
-                    item['score'] = int(item.get('score', 0) * 1.3)
+                    item['score'] = int(item.get('score', 0) * NewsletterConstants.TREND_SCORE_BOOST_MULTIPLIER)
 
         # Re-sort by score after trend boosting
         content_items.sort(key=lambda x: x.get('score', 0), reverse=True)
