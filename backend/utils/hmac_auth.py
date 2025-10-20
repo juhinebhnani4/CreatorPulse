@@ -93,7 +93,10 @@ def verify_tracking_token(
         expected_signature = expected_token.split(".")[1]
 
         # Compare signatures using constant-time comparison
-        return hmac.compare_digest(signature, expected_signature)
+        if not hmac.compare_digest(signature, expected_signature):
+            raise ValueError("Invalid token signature")
+
+        return True
 
     except (ValueError, IndexError) as e:
         raise ValueError(f"Invalid token: {str(e)}")
