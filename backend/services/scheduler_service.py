@@ -10,6 +10,7 @@ This service handles:
 
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+import logging
 
 from backend.models.scheduler import (
     SchedulerJobCreate,
@@ -19,6 +20,9 @@ from backend.models.scheduler import (
     SchedulerExecutionStats
 )
 from src.ai_newsletter.database.supabase_client import SupabaseManager
+from backend.utils.error_handling import handle_service_errors, NotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 class SchedulerService:
@@ -34,6 +38,7 @@ class SchedulerService:
             self._db = SupabaseManager()
         return self._db
 
+    @handle_service_errors(default_return=None, raise_on_error=True)
     async def create_job(self, user_id: str, request: SchedulerJobCreate) -> Dict[str, Any]:
         """
         Create a new scheduled job.
@@ -46,12 +51,15 @@ class SchedulerService:
             Dict with created job details
 
         Raises:
-            Exception: If workspace access denied or creation fails
+            NotFoundError: If workspace not found
+            Exception: If creation fails
         """
+        logger.info(f"Creating job '{request.name}' for workspace {request.workspace_id}")
+
         # Validate workspace access
         workspace = self.db.get_workspace(request.workspace_id)
         if not workspace:
-            raise Exception(f"Workspace {request.workspace_id} not found")
+            raise NotFoundError(f"Workspace {request.workspace_id} not found")
 
         # Prepare job data
         job_data = {
@@ -72,9 +80,11 @@ class SchedulerService:
 
         # Create job in database
         job = self.db.create_scheduler_job(job_data)
+        logger.info(f"Job created successfully: {job.get('id')}")
 
         return job
 
+    @handle_service_errors(default_return=[], raise_on_error=False)
     async def list_jobs(self, user_id: str, workspace_id: str) -> List[Dict[str, Any]]:
         """
         List all jobs for a workspace.
@@ -84,10 +94,12 @@ class SchedulerService:
             workspace_id: Workspace ID to filter jobs
 
         Returns:
-            List of jobs
+            List of jobs (empty list on error)
         """
+        logger.info(f"Listing jobs for workspace {workspace_id}")
         # RLS ensures user can only see their workspaces
         jobs = self.db.list_scheduler_jobs(workspace_id)
+        logger.info(f"Found {len(jobs)} jobs for workspace {workspace_id}")
         return jobs
 
     async def get_job(self, user_id: str, job_id: str) -> Dict[str, Any]:
