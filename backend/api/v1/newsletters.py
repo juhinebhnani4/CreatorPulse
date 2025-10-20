@@ -2,7 +2,7 @@
 Newsletter API endpoints.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from typing import Optional
 
 from backend.models.newsletter import (
@@ -15,18 +15,23 @@ from backend.models.newsletter import (
 from backend.models.responses import APIResponse
 from backend.services.newsletter_service import newsletter_service
 from backend.middleware.auth import get_current_user
+from backend.middleware.rate_limiter import limiter, RateLimits
 
 
 router = APIRouter()
 
 
 @router.post("/generate", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(RateLimits.NEWSLETTER_GENERATION)
 async def generate_newsletter(
+    http_request: Request,
     request: GenerateNewsletterRequest,
     user_id: str = Depends(get_current_user)
 ):
     """
     Generate newsletter from workspace content.
+
+    Rate limit: 5 requests per minute per IP
 
     This endpoint generates a newsletter using content from the workspace database
     (not live scraping). Content must be scraped first using the Content API.
@@ -245,12 +250,16 @@ async def delete_newsletter(
 
 
 @router.post("/{newsletter_id}/regenerate", response_model=APIResponse)
+@limiter.limit(RateLimits.NEWSLETTER_GENERATION)
 async def regenerate_newsletter(
+    http_request: Request,
     newsletter_id: str,
     user_id: str = Depends(get_current_user)
 ):
     """
     Regenerate newsletter with same or updated settings.
+
+    Rate limit: 5 requests per minute per IP
 
     Creates a new newsletter based on the original's settings.
     The original newsletter is not modified.

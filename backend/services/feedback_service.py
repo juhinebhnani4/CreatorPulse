@@ -14,10 +14,13 @@ from datetime import datetime, timedelta
 from uuid import UUID
 from collections import defaultdict, Counter
 
+from backend.services.base_service import BaseService
+from backend.utils.error_handling import handle_service_errors
+from backend.config.constants import FeedbackConstants
 from src.ai_newsletter.database.supabase_client import SupabaseManager
 
 
-class FeedbackService:
+class FeedbackService(BaseService):
     """
     Service for managing feedback and learning from user preferences.
 
@@ -29,14 +32,14 @@ class FeedbackService:
     5. Provide analytics and recommendations
     """
 
-    def __init__(self, supabase_manager: Optional[SupabaseManager] = None):
+    def __init__(self, db: Optional[SupabaseManager] = None):
         """
         Initialize feedback service.
 
         Args:
-            supabase_manager: Optional Supabase manager instance
+            db: Optional Supabase manager instance
         """
-        self.db = supabase_manager or SupabaseManager()
+        super().__init__(db)
 
     # =========================================================================
     # FEEDBACK RECORDING
@@ -259,6 +262,7 @@ class FeedbackService:
     # CONTENT SCORING ADJUSTMENT
     # =========================================================================
 
+    @handle_service_errors(default_return=[], log_errors=True)
     def adjust_content_scoring(
         self,
         workspace_id: str,
@@ -278,6 +282,7 @@ class FeedbackService:
         Returns:
             Adjusted content items with new scores
         """
+        self.logger.info(f"Adjusting content scoring for workspace {workspace_id}, {len(content_items)} items")
         adjusted_items = []
         adjustments_made = 0
         quality_scores_applied = {}
@@ -313,17 +318,19 @@ class FeedbackService:
             if apply_preferences and preferences:
                 preferred_sources = preferences.get('preferred_sources', [])
                 if source in preferred_sources:
-                    # Boost by 20% for preferred sources
-                    adjusted_score = int(adjusted_score * 1.2)
-                    adjustments.append("preferred_source:+20%")
+                    # Boost by configured multiplier for preferred sources
+                    adjusted_score = int(adjusted_score * FeedbackConstants.PREFERRED_SOURCE_BOOST_MULTIPLIER)
+                    boost_pct = (FeedbackConstants.PREFERRED_SOURCE_BOOST_MULTIPLIER - 1) * 100
+                    adjustments.append(f"preferred_source:+{boost_pct:.0f}%")
                     adjustments_made += 1
 
                 # Check score thresholds
                 min_threshold = preferences.get('min_score_threshold', 0)
                 if original_score < min_threshold:
-                    # Reduce score by 30% if below minimum preference
-                    adjusted_score = int(adjusted_score * 0.7)
-                    adjustments.append("below_threshold:-30%")
+                    # Reduce score by configured penalty if below minimum preference
+                    adjusted_score = int(adjusted_score * FeedbackConstants.BELOW_THRESHOLD_PENALTY_MULTIPLIER)
+                    penalty_pct = (1 - FeedbackConstants.BELOW_THRESHOLD_PENALTY_MULTIPLIER) * 100
+                    adjustments.append(f"below_threshold:-{penalty_pct:.0f}%")
                     adjustments_made += 1
 
             # Update item with adjusted score

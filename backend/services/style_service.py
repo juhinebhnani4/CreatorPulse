@@ -21,6 +21,8 @@ from backend.models.style_profile import (
     GeneratePromptResponse,
     StyleProfileSummary
 )
+from backend.services.base_service import BaseService
+from backend.utils.error_handling import handle_service_errors
 from src.ai_newsletter.database.supabase_client import SupabaseManager
 
 
@@ -37,11 +39,11 @@ except LookupError:
     nltk.download('stopwords', quiet=True)
 
 
-class StyleAnalysisService:
+class StyleAnalysisService(BaseService):
     """Service for analyzing writing style from newsletter samples."""
 
-    def __init__(self):
-        self.db = SupabaseManager()
+    def __init__(self, db: Optional[SupabaseManager] = None):
+        super().__init__(db)
         self.stopwords = set(stopwords.words('english'))
 
     def analyze_samples(
@@ -378,6 +380,7 @@ class StyleAnalysisService:
 
         return "\n".join(prompt_parts)
 
+    @handle_service_errors(default_return=None, log_errors=True)
     async def get_style_profile(self, workspace_id: UUID) -> Optional[StyleProfileResponse]:
         """
         Get style profile for workspace.
@@ -388,9 +391,11 @@ class StyleAnalysisService:
         Returns:
             StyleProfileResponse or None if not found
         """
+        self.logger.debug(f"Fetching style profile for workspace {workspace_id}")
         profile_data = self.db.get_style_profile(str(workspace_id))
 
         if not profile_data:
+            self.logger.info(f"No style profile found for workspace {workspace_id}")
             return None
 
         return StyleProfileResponse(**profile_data)
@@ -412,6 +417,7 @@ class StyleAnalysisService:
 
         return StyleProfileSummary(**summary_data)
 
+    @handle_service_errors(raise_on_error=True, log_errors=True)
     async def create_or_update_profile(
         self,
         workspace_id: UUID,
@@ -432,6 +438,8 @@ class StyleAnalysisService:
         Raises:
             ValueError: If profile exists and retrain=False
         """
+        self.logger.info(f"Creating/updating style profile for workspace {workspace_id}, retrain={retrain}")
+
         # Check if profile exists
         existing = await self.get_style_profile(workspace_id)
 
@@ -440,12 +448,14 @@ class StyleAnalysisService:
 
         if existing:
             # Update existing
+            self.logger.info(f"Updating existing style profile for workspace {workspace_id}")
             result = self.db.update_style_profile(
                 str(workspace_id),
                 profile_data.model_dump(exclude={'workspace_id', 'training_samples'})
             )
         else:
             # Create new
+            self.logger.info(f"Creating new style profile for workspace {workspace_id}")
             result = self.db.create_style_profile(profile_data.model_dump(mode='json'))
 
         return StyleProfileResponse(**result)

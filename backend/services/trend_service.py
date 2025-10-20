@@ -21,22 +21,26 @@ from backend.models.trend import (
     DetectTrendsResponse
 )
 from backend.models.content import ContentItemResponse
+from backend.services.base_service import BaseService
+from backend.utils.error_handling import handle_service_errors
+from backend.config.constants import TrendConstants
 from src.ai_newsletter.database.supabase_client import SupabaseManager
 
 
-class TrendDetectionService:
+class TrendDetectionService(BaseService):
     """Service for detecting and analyzing trends from content."""
 
-    def __init__(self, min_confidence: float = 0.6):
-        self.db = SupabaseManager()
-        self.min_confidence = min_confidence
+    def __init__(self, db: Optional[SupabaseManager] = None, min_confidence: float = None):
+        super().__init__(db)
+        self.min_confidence = min_confidence or TrendConstants.MIN_CONFIDENCE_THRESHOLD
         self.vectorizer = TfidfVectorizer(
-            max_features=100,
+            max_features=TrendConstants.TFIDF_MAX_FEATURES,
             stop_words='english',
-            ngram_range=(1, 3),  # unigrams, bigrams, trigrams
-            min_df=2  # word must appear in at least 2 documents
+            ngram_range=TrendConstants.TFIDF_NGRAM_RANGE,
+            min_df=TrendConstants.TFIDF_MIN_DF
         )
 
+    @handle_service_errors(default_return=([], {}), log_errors=True)
     async def detect_trends(
         self,
         workspace_id: UUID,
@@ -58,6 +62,7 @@ class TrendDetectionService:
         Returns:
             Tuple of (trends, analysis_summary)
         """
+        self.logger.info(f"Detecting trends for workspace {workspace_id}, days_back={days_back}")
         if min_confidence is None:
             min_confidence = self.min_confidence
 
@@ -418,6 +423,7 @@ class TrendDetectionService:
 
         return trends
 
+    @handle_service_errors(default_return=[], log_errors=True)
     async def get_active_trends(
         self,
         workspace_id: UUID,
@@ -433,6 +439,7 @@ class TrendDetectionService:
         Returns:
             List of active trends
         """
+        self.logger.debug(f"Fetching active trends for workspace {workspace_id}, limit={limit}")
         trends_data = self.db.get_active_trends(str(workspace_id), limit)
         return [TrendResponse(**t) for t in trends_data]
 

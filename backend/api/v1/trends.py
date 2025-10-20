@@ -5,7 +5,7 @@ Endpoints for detecting and managing content trends.
 """
 
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from uuid import UUID
 
 from backend.models.trend import (
@@ -18,6 +18,7 @@ from backend.models.trend import (
 )
 from backend.models.responses import APIResponse
 from backend.middleware.auth import get_current_user
+from backend.middleware.rate_limiter import limiter, RateLimits
 from backend.services.trend_service import TrendDetectionService
 from backend.api.v1.auth import verify_workspace_access
 
@@ -34,13 +35,17 @@ def get_trend_service() -> TrendDetectionService:
 # =============================================================================
 
 @router.post("/detect", response_model=APIResponse)
+@limiter.limit(RateLimits.TREND_DETECTION)
 async def detect_trends(
+    http_request: Request,
     request: DetectTrendsRequest,
     current_user: str = Depends(get_current_user),
     trend_service: TrendDetectionService = Depends(get_trend_service)
 ):
     """
     Detect trends from recent content.
+
+    Rate limit: 10 requests per minute per IP
 
     Analyzes content using a 5-stage pipeline:
     1. **Topic Extraction** - TF-IDF + K-means clustering

@@ -5,7 +5,7 @@ Endpoints for training and managing writing style profiles.
 """
 
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from uuid import UUID
 
 from backend.models.style_profile import (
@@ -19,6 +19,7 @@ from backend.models.style_profile import (
 )
 from backend.models.responses import APIResponse
 from backend.middleware.auth import get_current_user
+from backend.middleware.rate_limiter import limiter, RateLimits
 from backend.services.style_service import StyleAnalysisService
 from backend.api.v1.auth import verify_workspace_access
 
@@ -37,13 +38,17 @@ def get_style_service() -> StyleAnalysisService:
 # =============================================================================
 
 @router.post("/train", response_model=APIResponse)
+@limiter.limit(RateLimits.STYLE_TRAINING)
 async def train_style_profile(
+    http_request: Request,
     request: TrainStyleRequest,
     current_user: str = Depends(get_current_user),
     style_service: StyleAnalysisService = Depends(get_style_service)
 ):
     """
     Train a writing style profile from newsletter samples.
+
+    Rate limit: 10 requests per minute per IP
 
     Analyzes 5+ newsletter samples to extract writing patterns including:
     - Tone and formality level
