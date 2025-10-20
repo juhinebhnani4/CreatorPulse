@@ -4,6 +4,7 @@ Newsletter service - Business logic for newsletter generation and management.
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from uuid import UUID
 import sys
 from pathlib import Path
 
@@ -13,6 +14,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.ai_newsletter.database.supabase_client import SupabaseManager
 from src.ai_newsletter.generators import NewsletterGenerator
 from src.ai_newsletter.config.settings import get_settings
+from backend.services.trend_service import TrendDetectionService
+from backend.services.style_service import StyleAnalysisService
+from backend.services.feedback_service import FeedbackService
 
 
 class NewsletterService:
@@ -22,6 +26,9 @@ class NewsletterService:
         """Initialize newsletter service."""
         self.supabase = SupabaseManager()
         self.settings = get_settings()
+        self.trend_service = TrendDetectionService()
+        self.style_service = StyleAnalysisService()
+        self.feedback_service = FeedbackService(self.supabase)
 
     async def generate_newsletter(
         self,
@@ -61,6 +68,17 @@ class NewsletterService:
         if not workspace:
             raise ValueError("Workspace not found")
 
+        # Fetch active trends for this workspace
+        trends = await self.trend_service.get_active_trends(
+            workspace_id=UUID(workspace_id),
+            limit=5
+        )
+
+        # Fetch style profile for this workspace
+        style_profile = await self.style_service.get_style_profile(
+            workspace_id=UUID(workspace_id)
+        )
+
         # Load content items from database
         content_items = self.supabase.load_content_items(
             workspace_id=workspace_id,
@@ -75,6 +93,32 @@ class NewsletterService:
         # Filter by sources if specified
         if sources:
             content_items = [item for item in content_items if item.source in sources]
+
+        # Apply feedback-based content scoring adjustments
+        content_items = self.feedback_service.adjust_content_scoring(
+            workspace_id=workspace_id,
+            content_items=content_items,
+            apply_source_quality=True,
+            apply_preferences=True
+        )
+
+        # Boost content related to active trends (30% score increase)
+        if trends:
+            trend_keywords = set()
+            for trend in trends:
+                trend_keywords.update([kw.lower() for kw in trend.keywords])
+
+            for item in content_items:
+                # Check if item is related to any trend
+                item_text = (item.get('title', '') + ' ' + item.get('summary', '')).lower()
+                if any(keyword in item_text for keyword in trend_keywords):
+                    # Boost score by 30%
+                    item['trend_boosted'] = True
+                    item['original_score'] = item.get('score', 0)
+                    item['score'] = int(item.get('score', 0) * 1.3)
+
+        # Re-sort by score after trend boosting
+        content_items.sort(key=lambda x: x.get('score', 0), reverse=True)
 
         # Limit to max_items
         content_items = content_items[:max_items]
@@ -117,11 +161,23 @@ class NewsletterService:
             from openai import OpenAI
             generator.client = OpenAI(api_key=self.settings.newsletter.openai_api_key)
 
-        # Generate newsletter
+        # Generate style-specific prompt if profile exists
+        style_prompt = None
+        if style_profile:
+            style_prompt = self.style_service.generate_style_prompt(style_profile)
+
+        # Generate newsletter with trends context and style guidance
         html_content = generator.generate_newsletter(
             content_items,
             title=title,
-            max_items=max_items
+            max_items=max_items,
+            trends=[{
+                'topic': trend.topic,
+                'keywords': trend.keywords,
+                'strength_score': trend.strength_score,
+                'explanation': trend.explanation
+            } for trend in trends] if trends else None,
+            style_prompt=style_prompt
         )
 
         # Extract content item IDs
@@ -141,14 +197,23 @@ class NewsletterService:
             metadata={
                 'sources': sources or [],
                 'days_back': days_back,
-                'use_openrouter': use_openrouter
+                'use_openrouter': use_openrouter,
+                'trends_used': [trend.topic for trend in trends] if trends else [],
+                'trend_boosted_items': len([item for item in content_items if item.get('trend_boosted', False)]),
+                'style_profile_applied': style_profile is not None,
+                'style_tone': style_profile.tone if style_profile else None,
+                'feedback_adjusted_items': len([item for item in content_items if item.get('adjustments', [])])
             }
         )
 
         return {
             'newsletter': newsletter,
             'content_items_count': len(content_items),
-            'sources_used': list(set(item.source for item in content_items))
+            'sources_used': list(set(item.source for item in content_items)),
+            'trends_applied': len(trends) if trends else 0,
+            'trend_boosted_items': len([item for item in content_items if item.get('trend_boosted', False)]),
+            'style_profile_applied': style_profile is not None,
+            'feedback_adjusted_items': len([item for item in content_items if item.get('adjustments', [])])
         }
 
     async def list_newsletters(

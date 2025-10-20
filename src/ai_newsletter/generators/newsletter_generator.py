@@ -349,18 +349,22 @@ class NewsletterGenerator:
         title: Optional[str] = None,
         intro: Optional[str] = None,
         footer: Optional[str] = None,
-        max_items: int = 10
+        max_items: int = 10,
+        trends: Optional[List[Dict[str, Any]]] = None,
+        style_prompt: Optional[str] = None
     ) -> str:
         """
         Generate a newsletter from content items.
-        
+
         Args:
             content_items: List of ContentItem objects
             title: Newsletter title (if not provided, will be generated)
             intro: Newsletter introduction (if not provided, will be generated)
             footer: Newsletter footer (if not provided, will be generated)
             max_items: Maximum number of items to include
-            
+            trends: Optional list of trending topics to highlight
+            style_prompt: Optional writing style instructions from style profile
+
         Returns:
             HTML newsletter content
         """
@@ -381,11 +385,11 @@ class NewsletterGenerator:
 
         try:
             # Generate content using AI
-            generated_content = self._generate_content_with_ai(items, title, intro, footer)
-            
+            generated_content = self._generate_content_with_ai(items, title, intro, footer, trends, style_prompt)
+
             # Format as HTML
-            html_content = self._format_html(generated_content, items)
-            
+            html_content = self._format_html(generated_content, items, trends)
+
             self.logger.info(f"Generated newsletter with {len(items)} items")
             return html_content
             
@@ -398,23 +402,27 @@ class NewsletterGenerator:
         items: List[ContentItem],
         title: Optional[str] = None,
         intro: Optional[str] = None,
-        footer: Optional[str] = None
+        footer: Optional[str] = None,
+        trends: Optional[List[Dict[str, Any]]] = None,
+        style_prompt: Optional[str] = None
     ) -> Dict[str, str]:
         """
         Generate newsletter content using OpenAI.
-        
+
         Args:
             items: List of ContentItem objects
             title: Newsletter title (if not provided, will be generated)
             intro: Newsletter introduction (if not provided, will be generated)
             footer: Newsletter footer (if not provided, will be generated)
-            
+            trends: Optional list of trending topics
+            style_prompt: Optional writing style instructions
+
         Returns:
             Dictionary with generated content
         """
         try:
             # Build prompt
-            prompt = self._build_prompt(items, title, intro, footer)
+            prompt = self._build_prompt(items, title, intro, footer, trends, style_prompt)
             
             # Call API (OpenAI or OpenRouter)
             response = self.client.chat.completions.create(
@@ -463,20 +471,37 @@ class NewsletterGenerator:
         items: List[ContentItem],
         title: Optional[str] = None,
         intro: Optional[str] = None,
-        footer: Optional[str] = None
+        footer: Optional[str] = None,
+        trends: Optional[List[Dict[str, Any]]] = None,
+        style_prompt: Optional[str] = None
     ) -> str:
         """Build the prompt for OpenAI."""
-        
+
         # Calculate selection stats
         total_items = len(items)
         unique_sources = set(item.source for item in items)
+
+        # Add style guidance if available
+        style_text = ""
+        if style_prompt:
+            style_text = f"\n\nWRITING STYLE GUIDELINES:\n{style_prompt}\n"
+
+        # Add trending topics context if available
+        trends_text = ""
+        if trends and len(trends) > 0:
+            trends_text = "\n\nTRENDING TOPICS TO HIGHLIGHT:\n"
+            for i, trend in enumerate(trends, 1):
+                trends_text += f"{i}. {trend['topic']} (strength: {trend['strength_score']:.2f})\n"
+                trends_text += f"   Keywords: {', '.join(trend['keywords'][:5])}\n"
+                trends_text += f"   {trend.get('explanation', '')}\n"
+            trends_text += "\nPlease emphasize content related to these trending topics in the newsletter.\n"
 
         # Format items for the prompt
         items_text = f"""
 Content Selection:
 - Total items selected: {total_items} (intelligently ranked and filtered for diversity)
 - Sources: {', '.join(sorted(unique_sources))}
-
+{style_text}{trends_text}
 Top Items:
 """
         for i, item in enumerate(items, 1):
@@ -545,11 +570,32 @@ Requirements:
                 'footer': 'Thanks for reading!'
             }
     
-    def _format_html(self, generated_content: Dict[str, str], items: List[ContentItem]) -> str:
+    def _format_html(self, generated_content: Dict[str, str], items: List[ContentItem], trends: Optional[List[Dict[str, Any]]] = None) -> str:
         """Format the generated content as HTML using templates."""
-        
+
         template = self.templates.get(self.config.template, self.templates['default'])
-        
+
+        # Add trending section if trends are available
+        trending_html = ""
+        if trends and len(trends) > 0:
+            trending_html = """
+            <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 20px; margin-bottom: 30px; border-radius: 4px;">
+                <h2 style="margin-top: 0; color: #1e40af; font-size: 22px;">🔥 Trending Topics</h2>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+            """
+            for trend in trends[:3]:  # Show top 3 trends
+                trending_html += f"""
+                    <div style="background: white; padding: 12px; border-radius: 4px; border: 1px solid #bfdbfe;">
+                        <strong style="color: #1e40af;">{trend['topic']}</strong>
+                        <span style="color: #64748b; font-size: 13px; margin-left: 8px;">(Strength: {trend['strength_score']:.0%})</span>
+                        <p style="margin: 8px 0 0 0; color: #475569; font-size: 14px;">{trend.get('explanation', '')}</p>
+                    </div>
+                """
+            trending_html += """
+                </div>
+            </div>
+            """
+
         # Format content items
         content_html = ""
         for item in items:
@@ -568,14 +614,14 @@ Requirements:
                 </div>
             </div>
             """
-        
+
         # Replace template variables
         html = template.replace('{{title}}', generated_content.get('title', 'Daily Newsletter'))
         html = html.replace('{{date}}', datetime.now().strftime('%B %d, %Y'))
         html = html.replace('{{intro}}', generated_content.get('intro', 'Here are today\'s top stories:'))
-        html = html.replace('{{content}}', content_html)
+        html = html.replace('{{content}}', trending_html + content_html)
         html = html.replace('{{footer}}', generated_content.get('footer', 'Thanks for reading!'))
-        
+
         return html
     
     def _generate_empty_newsletter(self) -> str:

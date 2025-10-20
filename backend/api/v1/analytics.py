@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status, Header
 from fastapi.responses import StreamingResponse
 
 from backend.models.analytics_models import (
@@ -30,6 +30,7 @@ from backend.models.analytics_models import (
 from backend.models.responses import APIResponse
 from backend.services.analytics_service import AnalyticsService
 from backend.api.v1.auth import get_current_user, verify_workspace_access
+from backend.utils.hmac_auth import verify_tracking_token
 
 router = APIRouter()
 
@@ -43,21 +44,78 @@ router = APIRouter()
     response_model=APIResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Record Analytics Event",
-    description="Record an email analytics event (sent, opened, clicked, etc.)",
+    description="Record an email analytics event (sent, opened, clicked, etc.). Requires HMAC authentication via X-Tracking-Token header.",
 )
 async def record_analytics_event(
     event: EmailEventCreate,
-    # Note: No auth required for tracking events (called by email clients)
+    x_tracking_token: Optional[str] = Header(None, alias="X-Tracking-Token")
 ):
     """
-    Record an analytics event.
+    Record an analytics event with HMAC authentication.
 
     This endpoint is called by:
     - Email delivery service (for 'sent' events)
     - Tracking pixel (for 'opened' events)
     - Click tracking (for 'clicked' events)
     - Email service providers (for 'bounced', 'unsubscribed' events)
+
+    Authentication:
+    - Requires X-Tracking-Token header with valid HMAC signature
+    - Token format: {timestamp}.{signature}
+    - Tokens expire after 30 days
+
+    Example:
+    ```
+    POST /api/v1/analytics/events
+    Headers:
+      X-Tracking-Token: 1234567890.abc123def456...
+    Body:
+      {
+        "workspace_id": "...",
+        "newsletter_id": "...",
+        "event_type": "opened",
+        ...
+      }
+    ```
     """
+    # Verify HMAC token
+    if not x_tracking_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing tracking token. Include X-Tracking-Token header."
+        )
+
+    # Get secret key from environment
+    import os
+    secret_key = os.getenv("ANALYTICS_SECRET_KEY")
+    if not secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Analytics secret key not configured"
+        )
+
+    try:
+        # Verify token
+        is_valid = verify_tracking_token(
+            x_tracking_token,
+            str(event.newsletter_id),
+            str(event.workspace_id),
+            secret_key
+        )
+
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid tracking token"
+            )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Token verification failed: {str(e)}"
+        )
+
+    # Process the event
     try:
         analytics_service = AnalyticsService()
 
