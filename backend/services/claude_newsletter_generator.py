@@ -101,47 +101,76 @@ class ClaudeNewsletterGenerator:
     ) -> str:
         """Build the prompt for Claude."""
 
+        # Find hero image (highest scoring item with image)
+        hero_image = None
+        for item in items:
+            if item.get('image_url'):
+                hero_image = item.get('image_url')
+                break
+
         # Format items for prompt
         items_text = ""
         for i, item in enumerate(items, 1):
+            image_info = f"\n   Image: {item.get('image_url')}" if item.get('image_url') else ""
             items_text += f"""
 {i}. {item.get('title', 'Untitled')}
    Source: {item.get('source', 'Unknown')}
    Author: {item.get('author', 'Unknown')}
-   URL: {item.get('source_url', '#')}
+   URL: {item.get('source_url', '#')}{image_info}
    Summary: {item.get('summary') or item.get('content', 'No content')[:200]}
 """
 
-        prompt = f"""You are an expert newsletter writer creating a high-quality AI briefing. Transform the raw content below into an insightful, narrative-driven newsletter.
+        prompt = f"""You are an expert newsletter writer creating a high-quality AI briefing. Transform the raw content below into an insightful, narrative-driven newsletter with professional visual design.
 
 CONTENT ({len(items)} items):
 {items_text}
 
+HERO IMAGE (use at top of newsletter): {hero_image or 'No hero image available'}
+
 INSTRUCTIONS:
 
-1. IDENTIFY THEMES: Analyze all items and group into 3-5 thematic sections
-2. ADD CONTEXT: Explain WHY each theme matters, not just WHAT happened
-3. MERGE SIMILAR TOPICS: Synthesize related stories into cohesive narratives
-4. CREATE NARRATIVE FLOW: Use transitions, tell a story
-5. TONE: {tone}, journalistic, insightful
+1. VISUAL DESIGN:
+   - Start with hero image at top (if available)
+   - Include article thumbnails inline where images are provided
+   - Use professional color scheme (blues, oranges for accents)
+   - Add visual separators between sections
+
+2. IDENTIFY THEMES: Analyze all items and group into 3-5 thematic sections
+
+3. ADD CONTEXT: Explain WHY each theme matters, not just WHAT happened
+
+4. MERGE SIMILAR TOPICS: Synthesize related stories into cohesive narratives
+
+5. CREATE NARRATIVE FLOW: Use transitions, tell a story
+
+6. TONE: {tone}, journalistic, insightful
 
 Provide response as JSON:
 {{
     "title": "{title or 'AI Newsletter - ' + datetime.now().strftime('%B %d, %Y')}",
     "intro": "Engaging 3-4 sentence intro that sets context and previews themes",
-    "content": "HTML content with 3-5 thematic sections. Each section should have <h2> title, contextual analysis paragraphs, and inline citations with <a href> links to sources. Use <strong>, <em>, and styled callout boxes for emphasis.",
+    "content": "HTML content with professional design. Include hero image at top, thematic sections with <h2> titles, inline article images, contextual analysis paragraphs, and <a href> links. Use modern styling with colors, spacing, and visual hierarchy.",
     "footer": "Brief forward-looking closing (1-2 sentences)"
 }}
 
-EXAMPLE SECTION:
+STYLING GUIDELINES:
+- Hero image: <img src="URL" style="width: 100%; max-height: 400px; object-fit: cover; border-radius: 8px; margin-bottom: 24px;" />
+- Section headers: <h2 style="color: #1e40af; font-size: 24px; font-weight: 700; margin-top: 32px; margin-bottom: 16px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">Title</h2>
+- Article thumbnails: <img src="URL" style="width: 120px; height: 80px; object-fit: cover; border-radius: 4px; float: left; margin-right: 16px;" />
+- Callout boxes: <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px; margin: 16px 0; border-radius: 4px;"><strong>Key Insight:</strong> Text here</div>
+- Body text: <p style="color: #374151; line-height: 1.6; margin-bottom: 16px;">Content</p>
+
+EXAMPLE SECTION WITH IMAGE:
 ```html
-<h2>1. The AI Infrastructure Race Intensifies</h2>
-<p>This week underscored the massive capital requirements shaping the AI landscape, with three major infrastructure announcements...</p>
-<p>Key developments include <a href="URL">Company X's $37B financing deal</a> and <a href="URL">Company Y's new partnership</a>...</p>
-<p><strong>What this means:</strong> Companies securing infrastructure now gain long-term competitive advantage...</p>
+<h2 style="color: #1e40af; font-size: 24px; font-weight: 700; margin-top: 32px; margin-bottom: 16px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">1. The AI Infrastructure Race Intensifies</h2>
+<img src="IMAGE_URL" style="width: 100%; max-height: 300px; object-fit: cover; border-radius: 8px; margin-bottom: 16px;" />
+<p style="color: #374151; line-height: 1.6; margin-bottom: 16px;">This week underscored the massive capital requirements shaping the AI landscape, with three major infrastructure announcements...</p>
+<div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px; margin: 16px 0; border-radius: 4px;">
+<strong style="color: #1e40af;">What this means:</strong> Companies securing infrastructure now gain long-term competitive advantage...
+</div>
 ```
 
-Write sophisticated but accessible content. Prioritize insight over comprehensiveness."""
+Write sophisticated but accessible content with modern visual design. Prioritize insight and visual appeal."""
 
         return prompt
 
