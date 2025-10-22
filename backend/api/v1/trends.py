@@ -183,16 +183,7 @@ async def get_trend_history(
     """
     try:
         # Verify workspace access
-        has_access = await workspace_service.verify_workspace_access(
-            str(workspace_id),
-            current_user
-        )
-
-        if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied to workspace"
-            )
+        await verify_workspace_access(workspace_id, current_user)
 
         # Get trend history
         history = await trend_service.get_trend_history(workspace_id, days_back)
@@ -237,16 +228,7 @@ async def get_trend_summary(
     """
     try:
         # Verify workspace access
-        has_access = await workspace_service.verify_workspace_access(
-            str(workspace_id),
-            current_user
-        )
-
-        if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied to workspace"
-            )
+        await verify_workspace_access(workspace_id, current_user)
 
         # Get summary
         summary = await trend_service.get_trend_summary(workspace_id, days_back)
@@ -343,17 +325,8 @@ async def delete_trend(
             )
 
         # Verify workspace access (owner/admin only for deletion)
-        workspace_service = WorkspaceService()
-        has_access = await workspace_service.verify_workspace_access(
-            trend_data['workspace_id'],
-            current_user
-        )
-
-        if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied to workspace"
-            )
+        from uuid import UUID as UUID_converter
+        await verify_workspace_access(UUID_converter(trend_data['workspace_id']), current_user)
 
         # Delete trend
         deleted = trend_service.db.delete_trend(str(trend_id))

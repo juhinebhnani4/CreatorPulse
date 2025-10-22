@@ -293,12 +293,12 @@ class SupabaseManager:
                 ) \
                 .execute()
 
-            print(f"✅ Saved/updated {len(result.data)} content items (workspace: {workspace_id})")
+            print(f"[OK] Saved/updated {len(result.data)} content items (workspace: {workspace_id})")
             return result.data
 
         except Exception as e:
             # Log the error for debugging but don't swallow it
-            print(f"❌ Error saving content items: {e}")
+            print(f"[ERROR] Error saving content items: {e}")
             print(f"   Attempted to save {len(items)} items to workspace {workspace_id}")
             if items:
                 print(f"   First item URL: {items[0].source_url}")
@@ -306,18 +306,18 @@ class SupabaseManager:
             # Check if this is a constraint issue (shouldn't happen with upsert)
             error_str = str(e).lower()
             if 'unique' in error_str or 'constraint' in error_str:
-                print(f"   ⚠️ Constraint conflict detected - this shouldn't happen with upsert")
+                print(f"   [WARNING] Constraint conflict detected - this shouldn't happen with upsert")
                 print(f"   Falling back to manual duplicate handling...")
 
                 # Fallback: Try inserting only new items
                 try:
                     result = self.service_client.table('content_items').insert(data).execute()
-                    print(f"✅ Fallback insert succeeded: {len(result.data)} items")
+                    print(f"[OK] Fallback insert succeeded: {len(result.data)} items")
                     return result.data
                 except Exception as fallback_error:
-                    print(f"❌ Fallback also failed: {fallback_error}")
+                    print(f"[ERROR] Fallback also failed: {fallback_error}")
                     # Return empty as last resort, but log the issue
-                    print(f"⚠️ WARNING: All content insertion methods failed!")
+                    print(f"[WARNING] All content insertion methods failed!")
                     return []
 
             # Re-raise other errors
@@ -357,8 +357,8 @@ class SupabaseManager:
 
         result = query.execute()
 
-        print(f"📊 Loaded {len(result.data)} content items for workspace {workspace_id}")
-        print(f"   Query: scraped_at >= {cutoff_date.isoformat()[:19]}")
+        print(f"[ContentLoader] Loaded {len(result.data)} content items for workspace {workspace_id}")
+        print(f"[ContentLoader] Query: scraped_at >= {cutoff_date.isoformat()[:19]}")
 
         # Convert to ContentItem objects
         # Store database ID in metadata so it can be referenced later
@@ -427,10 +427,10 @@ class SupabaseManager:
             item = result.data if result.data else None
 
             if item is None:
-                print(f"[get_content_item] ❌ No data in result - item {content_item_id} not found in database")
+                print(f"[get_content_item] [ERROR] No data in result - item {content_item_id} not found in database")
                 return None
 
-            print(f"[get_content_item] ✅ Found item: {item.get('id')}")
+            print(f"[get_content_item] [OK] Found item: {item.get('id')}")
             print(f"[get_content_item]    - Title: {item.get('title', '')[:50]}...")
             print(f"[get_content_item]    - Source: {item.get('source')}")
             print(f"[get_content_item]    - Workspace: {item.get('workspace_id')}")
@@ -441,7 +441,7 @@ class SupabaseManager:
 
             return item
         except Exception as e:
-            print(f"[get_content_item] ⚠️ EXCEPTION getting content item {content_item_id}: {e}")
+            print(f"[get_content_item] [ERROR] EXCEPTION getting content item {content_item_id}: {e}")
             print(f"[get_content_item]    Exception type: {type(e).__name__}")
             print(f"[get_content_item]    Exception details: {str(e)}")
             import traceback

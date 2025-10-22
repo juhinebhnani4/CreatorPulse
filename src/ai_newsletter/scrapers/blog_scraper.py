@@ -89,7 +89,7 @@ class BlogScraper(BaseScraper):
         for page_url in page_urls:
             try:
                 self.logger.info(f"Scraping {page_url}")
-                response = self.session.get(page_url, timeout=10)
+                response = self.session.get(page_url, timeout=20)  # Increased from 10s to 20s
                 response.raise_for_status()
                 
                 soup = BeautifulSoup(response.content, 'html.parser')
@@ -122,9 +122,180 @@ class BlogScraper(BaseScraper):
             except Exception as e:
                 self.logger.error(f"Error parsing {page_url}: {e}")
                 continue
-        
+
         return all_items[:limit]
-    
+
+    def fetch_multiple_urls(
+        self,
+        urls: List[str],
+        limit_per_url: int = 15,
+        use_smart_extraction: bool = True,
+        use_crawling: bool = False,
+        crawl_delay: float = 1.0,
+        timeout: int = 20
+    ) -> List[ContentItem]:
+        """
+        Fetch content from multiple blog URLs with retry logic and fallback strategies.
+
+        Args:
+            urls: List of blog URLs to scrape
+            limit_per_url: Maximum articles to fetch per URL
+            use_smart_extraction: Use intelligent extraction methods (trafilatura, JSON-LD, etc.)
+            use_crawling: Enable deep link crawling for more articles
+            crawl_delay: Delay between requests in seconds
+            timeout: Request timeout in seconds
+
+        Returns:
+            Combined list of ContentItem objects from all blogs
+        """
+        all_items = []
+
+        for url in urls:
+            self.logger.info(f"Fetching blog: {url}")
+
+            # Retry logic with exponential backoff (matching RSS/Twitter pattern)
+            max_retries = 3
+            base_delay = 2  # seconds
+
+            for attempt in range(max_retries):
+                try:
+                    # Choose extraction method based on parameters
+                    if use_crawling:
+                        items = self.fetch_content_with_crawling(
+                            url=url,
+                            limit=limit_per_url,
+                            crawl_delay=crawl_delay,
+                            timeout=timeout
+                        )
+                    elif use_smart_extraction:
+                        items = self.fetch_content_smart(
+                            url=url,
+                            limit=limit_per_url
+                        )
+                    else:
+                        items = self.fetch_content(
+                            url=url,
+                            limit=limit_per_url
+                        )
+
+                    all_items.extend(items)
+                    self.logger.info(f"Successfully fetched {len(items)} articles from {url}")
+                    break  # Success! Exit retry loop
+
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        # Calculate exponential backoff delay
+                        delay = base_delay * (2 ** attempt)
+                        self.logger.warning(
+                            f"Blog scraping error for {url} (attempt {attempt+1}/{max_retries}): {e}. "
+                            f"Waiting {delay}s before retry..."
+                        )
+                        import time
+                        time.sleep(delay)
+                    else:
+                        # Final attempt failed
+                        self.logger.error(
+                            f"Blog scraping failed after {max_retries} attempts: {url}. "
+                            f"Error: {type(e).__name__}: {e}"
+                        )
+                        # Continue to next URL instead of failing completely
+                        continue
+
+        self.logger.info(f"Total blog articles fetched: {len(all_items)} from {len(urls)} blogs")
+        return all_items
+
+    def fetch_content_with_pagination(
+        self,
+        base_url: str,
+        limit: int = 15,
+        max_pages: int = 3,
+        page_selectors: List[str] = None,
+        timeout: int = 20
+    ) -> List[ContentItem]:
+        """
+        Fetch content with automatic pagination support.
+
+        Detects and follows pagination links to gather more articles across multiple pages.
+
+        Args:
+            base_url: Starting URL for the blog
+            limit: Maximum total articles to fetch
+            max_pages: Maximum number of pages to crawl
+            page_selectors: CSS selectors for "next page" links (tries multiple patterns)
+            timeout: Request timeout in seconds
+
+        Returns:
+            List of ContentItem objects from paginated pages
+        """
+        if page_selectors is None:
+            # Common pagination selector patterns
+            page_selectors = [
+                'a[rel="next"]',           # Rel=next attribute
+                'a.next',                  # Class="next"
+                'a.pagination-next',       # Common pagination class
+                'a[aria-label*="next"]',   # ARIA label containing "next"
+                'a:contains("Next")',      # Link text "Next"
+                '.pagination a:last-child' # Last pagination link
+            ]
+
+        all_items = []
+        current_url = base_url
+        visited_urls = set()
+
+        for page_num in range(max_pages):
+            # Prevent infinite loops
+            if current_url in visited_urls:
+                self.logger.warning(f"Detected pagination loop at {current_url}, stopping")
+                break
+
+            visited_urls.add(current_url)
+            self.logger.info(f"Fetching paginated page {page_num + 1} from {current_url}")
+
+            try:
+                # Get items from current page using smart extraction
+                items = self.fetch_content_smart(current_url, limit=limit)
+                all_items.extend(items)
+
+                self.logger.info(f"Page {page_num + 1}: Found {len(items)} articles (total: {len(all_items)})")
+
+                # Stop if we've reached the limit
+                if len(all_items) >= limit:
+                    self.logger.info(f"Reached article limit ({limit}), stopping pagination")
+                    break
+
+                # Find next page link
+                response = self.session.get(current_url, timeout=timeout)
+                soup = BeautifulSoup(response.content, 'html.parser')
+
+                next_link_found = False
+                for selector in page_selectors:
+                    # Try to find next page link with this selector
+                    try:
+                        next_link = soup.select_one(selector)
+                        if next_link and next_link.get('href'):
+                            from urllib.parse import urljoin
+                            next_url = urljoin(current_url, next_link['href'])
+
+                            # Verify it's a different URL
+                            if next_url != current_url and next_url not in visited_urls:
+                                current_url = next_url
+                                next_link_found = True
+                                self.logger.debug(f"Found next page via selector '{selector}': {next_url}")
+                                break
+                    except Exception as e:
+                        continue
+
+                if not next_link_found:
+                    self.logger.info(f"No more pagination links found, stopping at page {page_num + 1}")
+                    break
+
+            except Exception as e:
+                self.logger.warning(f"Error fetching paginated page {page_num + 1}: {type(e).__name__}: {e}")
+                break
+
+        self.logger.info(f"Pagination complete: {len(all_items)} total articles from {len(visited_urls)} pages")
+        return all_items[:limit]
+
     def _parse_item(
         self,
         raw_item: Any,
@@ -414,6 +585,8 @@ class BlogScraper(BaseScraper):
             return 'substack'
         if 'ghost.io' in domain or 'ghost.org' in domain:
             return 'ghost'
+        if 'huggingface.co' in domain:
+            return 'huggingface'
 
         # Check generator meta tag
         generator_tag = soup.find('meta', attrs={'name': 'generator'})
@@ -454,10 +627,13 @@ class BlogScraper(BaseScraper):
         Returns:
             Dictionary with extracted content
         """
+        self.logger.info(f"[Trafilatura] Starting extraction for: {url}")
+
         try:
             import trafilatura
 
             # Extract main content
+            self.logger.debug(f"[Trafilatura] Calling trafilatura.extract() with favor_precision=False, no_fallback=False")
             extracted = trafilatura.extract(
                 html_content,
                 include_comments=False,
@@ -468,35 +644,58 @@ class BlogScraper(BaseScraper):
             )
 
             # Extract metadata
+            self.logger.debug(f"[Trafilatura] Calling trafilatura.extract_metadata()")
             metadata = trafilatura.extract_metadata(html_content)
 
             result = {}
             if extracted:
+                content_length = len(extracted.strip())
                 result['content'] = extracted
-                # Generate summary from extracted content (no title available here)
                 result['summary'] = self._extract_summary(extracted, 200, title='')
+                self.logger.info(f"[Trafilatura] OK: Extracted content: {content_length} chars")
+            else:
+                self.logger.warning(f"[Trafilatura] WARNING: trafilatura.extract() returned None/empty for {url}")
 
             if metadata:
+                fields_extracted = []
                 if metadata.title:
                     result['title'] = metadata.title
+                    fields_extracted.append(f"title='{metadata.title[:50]}'")
                 if metadata.author:
                     result['author'] = metadata.author
+                    fields_extracted.append(f"author='{metadata.author}'")
                 if metadata.date:
                     result['date'] = metadata.date
+                    fields_extracted.append(f"date='{metadata.date}'")
                 if metadata.description:
                     result['description'] = metadata.description
+                    fields_extracted.append(f"description={len(metadata.description)} chars")
                 if metadata.categories:
                     result['tags'] = metadata.categories
+                    fields_extracted.append(f"tags={len(metadata.categories)} items")
                 if metadata.image:
                     result['image_url'] = metadata.image
+                    fields_extracted.append("image")
+
+                if fields_extracted:
+                    self.logger.info(f"[Trafilatura] OK: Extracted metadata: {', '.join(fields_extracted)}")
+                else:
+                    self.logger.warning(f"[Trafilatura] WARNING: extract_metadata() returned no usable fields")
+            else:
+                self.logger.warning(f"[Trafilatura] WARNING: extract_metadata() returned None")
+
+            if result:
+                self.logger.info(f"[Trafilatura] SUCCESS - Total fields extracted: {list(result.keys())}")
+            else:
+                self.logger.warning(f"[Trafilatura] FAILED - No data extracted from {url}")
 
             return result
 
         except ImportError:
-            self.logger.warning("trafilatura not installed, falling back to template extraction")
+            self.logger.warning("[Trafilatura] ERROR: trafilatura not installed, falling back to template extraction")
             return {}
         except Exception as e:
-            self.logger.warning(f"trafilatura extraction failed: {e}")
+            self.logger.error(f"[Trafilatura] ERROR: Exception: {type(e).__name__}: {e}")
             return {}
 
     def fetch_content_smart(
@@ -525,7 +724,7 @@ class BlogScraper(BaseScraper):
         """
         try:
             self.logger.info(f"Smart scraping: {url}")
-            response = self.session.get(url, timeout=10)
+            response = self.session.get(url, timeout=20)  # Increased from 10s to 20s
             response.raise_for_status()
 
             html_content = response.content
@@ -543,10 +742,18 @@ class BlogScraper(BaseScraper):
             trafilatura_data = self._extract_with_trafilatura(html_content.decode('utf-8', errors='ignore'), url)
 
             # Extract metadata from various sources
+            self.logger.info(f"[Smart Scrape] Extracting metadata from multiple sources...")
             og_data = self._extract_opengraph(soup)
+            self.logger.debug(f"[Smart Scrape] Open Graph: {list(og_data.keys()) if og_data else 'empty'}")
+
             twitter_data = self._extract_twitter_cards(soup)
+            self.logger.debug(f"[Smart Scrape] Twitter Cards: {list(twitter_data.keys()) if twitter_data else 'empty'}")
+
             jsonld_data = self._extract_jsonld(soup)
+            self.logger.debug(f"[Smart Scrape] JSON-LD: {len(jsonld_data)} items")
+
             meta_data = self._extract_meta_tags(soup)
+            self.logger.debug(f"[Smart Scrape] Meta tags: {list(meta_data.keys()) if meta_data else 'empty'}")
 
             # Try to find articles in JSON-LD
             articles_from_jsonld = []
@@ -554,10 +761,14 @@ class BlogScraper(BaseScraper):
                 if item.get('@type') in ['Article', 'BlogPosting', 'NewsArticle']:
                     articles_from_jsonld.append(item)
 
+            if articles_from_jsonld:
+                self.logger.info(f"[Smart Scrape] Found {len(articles_from_jsonld)} articles in JSON-LD")
+
             items = []
 
             # If this is a single article page (most common case)
             if trafilatura_data or og_data or articles_from_jsonld:
+                self.logger.info(f"[Smart Scrape] Creating item from merged sources...")
                 item = self._create_item_from_multiple_sources(
                     url=url,
                     trafilatura_data=trafilatura_data,
@@ -568,8 +779,12 @@ class BlogScraper(BaseScraper):
                     soup=soup
                 )
 
+                self.logger.info(f"[Smart Scrape] Validating item...")
                 if self.validate_item(item):
                     items.append(item)
+                    self.logger.info(f"[Smart Scrape] OK: Item validation passed - added to results")
+                else:
+                    self.logger.warning(f"[Smart Scrape] ERROR: Item validation FAILED - item rejected")
 
             # If no items yet or if this looks like a list page, try template-based extraction
             if not items or limit > 1:
@@ -584,14 +799,23 @@ class BlogScraper(BaseScraper):
                     seen_urls.add(item.source_url)
                     unique_items.append(item)
 
-            self.logger.info(f"Smart scraping extracted {len(unique_items)} unique items from {url}")
+            self.logger.info(
+                f"[Smart Scrape] OK: COMPLETED - Extracted {len(unique_items)} unique items from {url}\n"
+                f"  Platform: {platform}\n"
+                f"  Trafilatura data: {'Yes' if trafilatura_data else 'No'}\n"
+                f"  Open Graph data: {'Yes' if og_data else 'No'}\n"
+                f"  JSON-LD articles: {len(articles_from_jsonld)}\n"
+                f"  Items after validation: {len(unique_items)}"
+            )
             return unique_items[:limit]
 
         except requests.exceptions.RequestException as e:
-            self.logger.error(f"Error fetching {url}: {e}")
+            self.logger.error(f"[Smart Scrape] ERROR: HTTP Error fetching {url}: {type(e).__name__}: {e}")
             return []
         except Exception as e:
-            self.logger.error(f"Error in smart scraping {url}: {e}")
+            self.logger.error(f"[Smart Scrape] ERROR: Unexpected error for {url}: {type(e).__name__}: {e}")
+            import traceback
+            self.logger.error(f"[Smart Scrape] Traceback:\n{traceback.format_exc()}")
             return []
 
     def _create_item_from_multiple_sources(
@@ -634,12 +858,83 @@ class BlogScraper(BaseScraper):
             'Untitled'
         )
 
-        # Content (priority: trafilatura > JSON-LD > OG description)
-        content = (
-            trafilatura_data.get('content') or
-            jsonld_data.get('articleBody') or
-            ''
-        )
+        # Content (priority: trafilatura > JSON-LD > fallback to main/article tags)
+        self.logger.info(f"[Content Merge] Building content for: {url}")
+
+        content_sources = []
+        content = trafilatura_data.get('content') or jsonld_data.get('articleBody') or ''
+
+        if trafilatura_data.get('content'):
+            content_length = len(trafilatura_data['content'].strip())
+            content_sources.append(f"trafilatura ({content_length} chars)")
+        elif jsonld_data.get('articleBody'):
+            content_length = len(jsonld_data['articleBody'].strip())
+            content_sources.append(f"JSON-LD ({content_length} chars)")
+
+        # Fallback: If content is still empty, try extracting from common HTML containers
+        if not content or len(content.strip()) < 100:
+            self.logger.warning(
+                f"[Content Merge] Primary extraction yielded {len(content.strip())} chars - "
+                f"attempting fallback HTML parsing..."
+            )
+
+            # Try progressively broader selectors until we find content
+            selectors_to_try = [
+                # HuggingFace-specific selectors (most specific first)
+                ('div.blog-content', 'HuggingFace blog content div'),
+                ('div.prose', 'HuggingFace prose container'),
+                ('article > div.content', 'Article content div'),
+                # Generic article/main tags
+                ('article', 'Generic article tag'),
+                ('main', 'Generic main tag'),
+                # Class-based selectors (broader)
+                (re.compile(r'content|post-body|article-body|blog-content|entry-content'), 'Content class pattern'),
+            ]
+
+            for selector, description in selectors_to_try:
+                self.logger.debug(f"[Content Merge] Trying selector: {description}")
+
+                if isinstance(selector, str):
+                    containers = soup.select(selector, limit=1)
+                else:
+                    # Regex pattern for class names
+                    containers = soup.find_all(class_=selector, limit=1)
+
+                for container in containers:
+                    # Remove noise elements
+                    noise_selectors = [
+                        'script', 'style', 'nav', 'footer', 'header', 'aside',
+                        '.toc', '.sidebar', '.related-posts', '.comments', '.social-share'
+                    ]
+                    for noise_sel in noise_selectors:
+                        for tag in container.select(noise_sel):
+                            tag.decompose()
+
+                    # Get text content
+                    text_content = container.get_text(separator='\n', strip=True)
+                    if len(text_content) > 100:  # Only use if substantial content
+                        content = text_content
+                        content_length = len(text_content.strip())
+                        content_sources.append(f"HTML fallback:{description} ({content_length} chars)")
+                        self.logger.info(
+                            f"[Content Merge] OK: Fallback extraction succeeded with {description} - "
+                            f"{content_length} chars"
+                        )
+                        break
+
+                if len(content.strip()) >= 100:
+                    break  # Found good content, stop trying
+
+            if not content or len(content.strip()) < 100:
+                self.logger.error(
+                    f"[Content Merge] ERROR: ALL extraction methods failed for {url} - "
+                    f"final content length: {len(content.strip())} chars"
+                )
+
+        if content_sources:
+            self.logger.info(f"[Content Merge] Content sources: {' -> '.join(content_sources)}")
+        else:
+            self.logger.warning(f"[Content Merge] WARNING: No content extracted from any source")
 
         # Summary (priority: trafilatura > OG > Twitter > meta description > content > title)
         summary = (
@@ -738,6 +1033,18 @@ class BlogScraper(BaseScraper):
             }
         )
 
+        # Log final item summary
+        self.logger.info(
+            f"[Content Merge] FINAL ITEM CREATED:\n"
+            f"  - Title: '{title[:60]}...' ({len(title)} chars)\n"
+            f"  - Content: {len(content.strip())} chars\n"
+            f"  - Summary: {len(summary) if summary else 0} chars\n"
+            f"  - Author: {author or 'None'}\n"
+            f"  - Image: {'Yes' if image_url else 'No'}\n"
+            f"  - Tags: {len(tags)} tags\n"
+            f"  - URL: {url}"
+        )
+
         return item
 
     def fetch_with_template(
@@ -785,6 +1092,13 @@ class BlogScraper(BaseScraper):
                 'content_selector': '.body, .available-content',
                 'date_selector': 'time',
                 'author_selector': '.author',
+            },
+            'huggingface': {
+                'article_selector': 'article, .blog-post',
+                'title_selector': 'h1, .blog-post-title',
+                'content_selector': '.blog-content, article > div, main',
+                'date_selector': 'time, .published-date',
+                'author_selector': '.author, .blog-author',
             },
         }
         
@@ -1087,7 +1401,7 @@ class BlogScraper(BaseScraper):
             self.logger.info(f"Starting crawling scrape of {url}")
 
             # Step 1: Fetch list page
-            response = self.session.get(url, timeout=10)
+            response = self.session.get(url, timeout=20)  # Increased from 10s to 20s
             response.raise_for_status()
 
             html_content = response.content

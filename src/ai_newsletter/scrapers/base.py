@@ -2,6 +2,17 @@
 Base scraper class providing a template for all content scrapers.
 """
 
+# DEBUG MARKER - Verify this file is being loaded from source
+import sys
+import os
+_marker_file = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'BASE_LOADED_MARKER.txt')
+with open(_marker_file, 'w') as f:
+    f.write('BASE.PY LOADED FROM SOURCE - NEW VALIDATION ACTIVE\n')
+sys.stderr.write("=" * 80 + "\n")
+sys.stderr.write("*** BASE.PY LOADED FROM SOURCE - NEW VALIDATION ACTIVE ***\n")
+sys.stderr.write("=" * 80 + "\n")
+sys.stderr.flush()
+
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 import pandas as pd
@@ -123,24 +134,47 @@ class BaseScraper(ABC):
         
         return df
     
-    def validate_item(self, item: ContentItem) -> bool:
+    def validate_item(self, item: ContentItem, min_content_length: int = 100) -> bool:
         """
-        Validate a ContentItem to ensure it has required fields.
-        
+        Validate a ContentItem to ensure it has required fields AND meaningful content.
+
         Args:
             item: ContentItem to validate
-            
+            min_content_length: Minimum content length in characters (default: 100)
+
         Returns:
             True if valid, False otherwise
         """
+        # Check required fields exist
         required_fields = ['title', 'source', 'source_url', 'created_at']
-        
+
         for field in required_fields:
             value = getattr(item, field, None)
             if value is None or (isinstance(value, str) and not value.strip()):
-                self.logger.warning(f"Item missing required field: {field}")
+                self.logger.warning(f"[Validation FAILED] Item missing required field: {field}")
                 return False
-        
+
+        # Check title quality - reject generic/empty titles
+        title = getattr(item, 'title', '')
+        if title.strip().lower() in ['untitled', 'no title', 'n/a', '']:
+            self.logger.warning(
+                f"[Validation FAILED] Item has invalid title: '{title}' (URL: {item.source_url})"
+            )
+            return False
+
+        # Check content quality - must have substantial text
+        content = getattr(item, 'content', '')
+        if not content or len(content.strip()) < min_content_length:
+            self.logger.warning(
+                f"[Validation FAILED] Item has insufficient content: {len(content.strip())} chars "
+                f"(minimum: {min_content_length}) - Title: '{title[:50]}...' (URL: {item.source_url})"
+            )
+            return False
+
+        self.logger.info(
+            f"[Validation PASSED] '{title[:50]}...' - "
+            f"{len(content.strip())} chars content (URL: {item.source_url})"
+        )
         return True
     
     def filter_items(

@@ -2,6 +2,7 @@
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SampleDataBadge } from '@/components/ui/sample-data-badge';
 import { Users, Send, TrendingUp, TrendingDown } from 'lucide-react';
 
 interface StatsOverviewProps {
@@ -10,6 +11,7 @@ interface StatsOverviewProps {
   openRate?: number;
   openRateTrend?: number; // Percentage change from previous
   isLoading?: boolean;
+  isUsingMockData?: boolean; // Flag to show sample data indicator
 }
 
 export function StatsOverview({
@@ -18,6 +20,7 @@ export function StatsOverview({
   openRate,
   openRateTrend,
   isLoading = false,
+  isUsingMockData = false,
 }: StatsOverviewProps) {
   if (isLoading) {
     return (
@@ -95,6 +98,11 @@ export function StatsOverview({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {isUsingMockData && (
+        <div className="md:col-span-3 -mb-4">
+          <SampleDataBadge tooltip="These statistics are sample data. They will update with real metrics once you send newsletters." />
+        </div>
+      )}
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         const isPositiveTrend = stat.trend !== undefined && stat.trend >= 0;

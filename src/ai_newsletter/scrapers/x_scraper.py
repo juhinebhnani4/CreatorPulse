@@ -142,29 +142,52 @@ class XScraper(BaseScraper):
                 return []
             
             self.logger.info(f"Searching X for: {search_query}")
-            
-            # Fetch tweets using API v2
-            # X API requires max_results between 10-100
-            tweets = self.client.search_recent_tweets(
-                query=search_query,
-                max_results=max(10, min(limit, 100)),
-                tweet_fields=[
-                    'created_at', 'public_metrics', 'entities', 'author_id',
-                    'referenced_tweets',  # Get quoted tweets, RTs, replies
-                    'conversation_id',    # Thread context
-                    'attachments',        # Media references
-                ],
-                user_fields=['username', 'name'],
-                expansions=[
-                    'author_id',
-                    'referenced_tweets.id',              # Get full quoted tweet content
-                    'referenced_tweets.id.author_id',    # Get quoted tweet author
-                    'attachments.media_keys',            # Get media details
-                ],
-                media_fields=['url', 'preview_image_url', 'type', 'duration_ms', 'alt_text'],
-            )
-            
-            if not tweets.data:
+
+            # Retry logic with exponential backoff for rate limits
+            max_retries = 3
+            base_delay = 2  # seconds
+            tweets = None
+
+            for attempt in range(max_retries):
+                try:
+                    # Fetch tweets using API v2
+                    # X API requires max_results between 10-100
+                    tweets = self.client.search_recent_tweets(
+                        query=search_query,
+                        max_results=max(10, min(limit, 100)),
+                        tweet_fields=[
+                            'created_at', 'public_metrics', 'entities', 'author_id',
+                            'referenced_tweets',  # Get quoted tweets, RTs, replies
+                            'conversation_id',    # Thread context
+                            'attachments',        # Media references
+                        ],
+                        user_fields=['username', 'name'],
+                        expansions=[
+                            'author_id',
+                            'referenced_tweets.id',              # Get full quoted tweet content
+                            'referenced_tweets.id.author_id',    # Get quoted tweet author
+                            'attachments.media_keys',            # Get media details
+                        ],
+                        media_fields=['url', 'preview_image_url', 'type', 'duration_ms', 'alt_text'],
+                    )
+                    break  # Success! Exit retry loop
+
+                except tweepy.errors.TooManyRequests as e:
+                    if attempt < max_retries - 1:
+                        # Calculate exponential backoff delay
+                        delay = base_delay * (2 ** attempt)
+                        self.logger.warning(f"X API rate limit hit (attempt {attempt+1}/{max_retries}). Waiting {delay}s before retry...")
+                        import time
+                        time.sleep(delay)
+                    else:
+                        # Final attempt failed
+                        self.logger.warning(f"X API rate limit exceeded for query: {search_query} after {max_retries} attempts. Skipping this source.")
+                        return []
+                except Exception as e:
+                    # Other errors shouldn't be retried
+                    raise e
+
+            if not tweets or not tweets.data:
                 self.logger.warning("No tweets found")
                 return []
             

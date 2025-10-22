@@ -52,12 +52,21 @@ class Settings(BaseSettings):
     supabase_key: Optional[str] = None
     supabase_service_key: Optional[str] = None
 
-    # OpenAI / OpenRouter
+    # AI Providers (Anthropic/Claude, OpenAI, OpenRouter)
+    # Anthropic (Claude) - PRIMARY
+    anthropic_api_key: Optional[str] = None
+    anthropic_model: str = "claude-sonnet-4-5-20250929"
+    anthropic_max_tokens: int = 4096
+
+    # OpenAI - DISABLED (using Claude)
     openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-4-turbo-preview"
+
+    # OpenRouter - PRIMARY (for Claude access)
     openrouter_api_key: Optional[str] = None
     use_openrouter: bool = False
     openrouter_model: str = "anthropic/claude-3.5-sonnet"
-    openai_model: str = "gpt-4-turbo-preview"
+    openrouter_max_tokens: int = 4096
 
     # Email
     smtp_server: Optional[str] = None

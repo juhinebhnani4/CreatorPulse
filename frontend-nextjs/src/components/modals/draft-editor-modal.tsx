@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -14,7 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArticleCard } from '@/components/dashboard/article-card';
 import { useToast } from '@/lib/hooks/use-toast';
-import { Monitor, Smartphone, Save, Send, Clock } from 'lucide-react';
+import { Monitor, Smartphone, Save, Send, Clock, Eye, Edit3 } from 'lucide-react';
+import { newslettersApi } from '@/lib/api/newsletters';
 
 interface ContentItem {
   id: string;
@@ -53,14 +55,50 @@ export function DraftEditorModal({
   const { toast } = useToast();
   const [subject, setSubject] = useState(initialSubject || '');
   const [items, setItems] = useState(initialItems || []);
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [newsletterHtml, setNewsletterHtml] = useState<string | null>(null);
+  const [isLoadingHtml, setIsLoadingHtml] = useState(false);
 
   useEffect(() => {
     setSubject(initialSubject || '');
     setItems(initialItems || []);
   }, [initialSubject, initialItems]);
+
+  // Fetch newsletter HTML when modal opens
+  useEffect(() => {
+    async function fetchNewsletterHtml() {
+      if (!open || !draftId) return;
+
+      setIsLoadingHtml(true);
+      try {
+        const newsletter = await newslettersApi.get(draftId);
+        console.log('[DraftEditorModal] Fetched newsletter:', {
+          id: newsletter.id,
+          hasContentHtml: !!newsletter.content_html,
+          contentHtmlLength: newsletter.content_html?.length,
+          hasHtmlContent: !!(newsletter as any).html_content,
+          htmlContentLength: (newsletter as any).html_content?.length,
+        });
+
+        // Use content_html field (correct field name)
+        setNewsletterHtml(newsletter.content_html || '');
+      } catch (error) {
+        console.error('[DraftEditorModal] Failed to fetch newsletter HTML:', error);
+        toast({
+          title: 'Error Loading Newsletter',
+          description: 'Could not load newsletter HTML preview',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoadingHtml(false);
+      }
+    }
+
+    fetchNewsletterHtml();
+  }, [open, draftId]);
 
   // Auto-save functionality (only for subject line changes)
   // Note: Article edits are already auto-saved via onEditArticle
@@ -130,91 +168,163 @@ export function DraftEditorModal({
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader className="border-b pb-4">
           <div className="flex items-center justify-between">
-            <DialogTitle>Edit Newsletter Draft</DialogTitle>
+            <DialogTitle>Newsletter Draft</DialogTitle>
+            <DialogDescription className="sr-only">
+              View and edit your newsletter with live preview
+            </DialogDescription>
             <div className="flex items-center gap-2">
-              <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as any)}>
+              {/* View Mode Toggle */}
+              <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'edit' | 'preview')}>
                 <TabsList className="grid w-[200px] grid-cols-2">
-                  <TabsTrigger value="desktop" className="text-xs">
-                    <Monitor className="h-3 w-3 mr-1" />
-                    Desktop
+                  <TabsTrigger value="edit" className="text-xs">
+                    <Edit3 className="h-3 w-3 mr-1" />
+                    Edit
                   </TabsTrigger>
-                  <TabsTrigger value="mobile" className="text-xs">
-                    <Smartphone className="h-3 w-3 mr-1" />
-                    Mobile
+                  <TabsTrigger value="preview" className="text-xs">
+                    <Eye className="h-3 w-3 mr-1" />
+                    HTML Preview
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
+
+              {/* Device Preview (only show in preview mode) */}
+              {viewMode === 'preview' && (
+                <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as any)}>
+                  <TabsList className="grid w-[200px] grid-cols-2">
+                    <TabsTrigger value="desktop" className="text-xs">
+                      <Monitor className="h-3 w-3 mr-1" />
+                      Desktop
+                    </TabsTrigger>
+                    <TabsTrigger value="mobile" className="text-xs">
+                      <Smartphone className="h-3 w-3 mr-1" />
+                      Mobile
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
             </div>
           </div>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-6 py-4">
-          {/* Subject Line Editor */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium">Subject Line</label>
-              <span className={`text-xs font-medium ${subjectColor}`}>
-                {subjectLength} characters
-                {subjectLength >= 40 && subjectLength <= 60 && ' ✓'}
-              </span>
-            </div>
-            <Input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Enter your newsletter subject..."
-              className="text-lg font-semibold"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Optimal: 40-60 characters for best open rates
-            </p>
-          </div>
-
-          {/* Preview Container */}
-          <div
-            className={`border rounded-lg p-6 bg-background ${
-              previewMode === 'mobile' ? 'max-w-sm mx-auto' : ''
-            }`}
-          >
-            {/* Newsletter Header */}
-            <div className="mb-6 pb-4 border-b">
-              <h1 className="text-2xl font-bold mb-1">{subject || 'Your Newsletter'}</h1>
-              <p className="text-sm text-muted-foreground">
-                {new Intl.DateTimeFormat('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                }).format(new Date())}
-              </p>
-            </div>
-
-            {/* Articles */}
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold mb-3">Today's Top Stories</h2>
-              {items.map((item) => (
-                <ArticleCard
-                  key={item.id}
-                  item={item}
-                  editable={true}
-                  onEdit={handleEditItem}
+          {viewMode === 'edit' ? (
+            <>
+              {/* Subject Line Editor */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium">Subject Line</label>
+                  <span className={`text-xs font-medium ${subjectColor}`}>
+                    {subjectLength} characters
+                    {subjectLength >= 40 && subjectLength <= 60 && ' ✓'}
+                  </span>
+                </div>
+                <Input
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Enter your newsletter subject..."
+                  className="text-lg font-semibold"
                 />
-              ))}
-            </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Optimal: 40-60 characters for best open rates
+                </p>
+              </div>
 
-            {/* Footer */}
-            <div className="mt-8 pt-4 border-t text-center text-xs text-muted-foreground">
-              <p>You're receiving this because you subscribed to our newsletter</p>
-              <p className="mt-1">
-                <a href="#" className="hover:underline">
-                  Unsubscribe
-                </a>
-                {' • '}
-                <a href="#" className="hover:underline">
-                  Manage Preferences
-                </a>
-              </p>
-            </div>
-          </div>
+              {/* Preview Container */}
+              <div className="border rounded-lg p-6 bg-background">
+                {/* Newsletter Header */}
+                <div className="mb-6 pb-4 border-b">
+                  <h1 className="text-2xl font-bold mb-1">{subject || 'Your Newsletter'}</h1>
+                  <p className="text-sm text-muted-foreground">
+                    {new Intl.DateTimeFormat('en-US', {
+                      weekday: 'long',
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                    }).format(new Date())}
+                  </p>
+                </div>
+
+                {/* Articles */}
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold mb-3">Today's Top Stories</h2>
+
+                  {/* Show helpful message if no items (thematic newsletter) */}
+                  {items.length === 0 ? (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                      <div className="text-blue-600 mb-2">
+                        <Eye className="h-8 w-8 mx-auto mb-2" />
+                        <p className="font-semibold">This is a thematic newsletter</p>
+                      </div>
+                      <p className="text-sm text-blue-700 mb-4">
+                        This newsletter uses AI to synthesize content into narrative sections.
+                        Individual article editing is not available.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setViewMode('preview')}
+                        className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Switch to HTML Preview
+                      </Button>
+                    </div>
+                  ) : (
+                    items.map((item) => (
+                      <ArticleCard
+                        key={item.id}
+                        item={item}
+                        editable={true}
+                        onEdit={handleEditItem}
+                      />
+                    ))
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="mt-8 pt-4 border-t text-center text-xs text-muted-foreground">
+                  <p>You're receiving this because you subscribed to our newsletter</p>
+                  <p className="mt-1">
+                    <a href="#" className="hover:underline">
+                      Unsubscribe
+                    </a>
+                    {' • '}
+                    <a href="#" className="hover:underline">
+                      Manage Preferences
+                    </a>
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* HTML Preview Mode */}
+              {isLoadingHtml ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Loading newsletter preview...</p>
+                  </div>
+                </div>
+              ) : newsletterHtml ? (
+                <div
+                  className={`border rounded-lg bg-white shadow-sm ${
+                    previewMode === 'mobile' ? 'max-w-sm mx-auto' : ''
+                  }`}
+                  style={{ minHeight: '400px' }}
+                >
+                  <div dangerouslySetInnerHTML={{ __html: newsletterHtml }} />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-64 border rounded-lg">
+                  <div className="text-center">
+                    <p className="text-muted-foreground">No HTML content available</p>
+                    <p className="text-sm text-muted-foreground mt-2">Try regenerating the newsletter</p>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <DialogFooter className="border-t pt-4 flex-col sm:flex-row gap-2">

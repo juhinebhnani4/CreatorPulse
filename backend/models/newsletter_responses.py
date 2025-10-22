@@ -84,11 +84,15 @@ class NewsletterDetailResponse(BaseModel):
     id: str = Field(..., description="Newsletter ID")
     workspace_id: str = Field(..., description="Workspace ID")
     title: str = Field(..., description="Newsletter title")
-    html_content: Optional[str] = Field(None, description="HTML content")
+    content_html: Optional[str] = Field(None, description="HTML content", alias="html_content")
+    content_text: Optional[str] = Field(None, description="Plain text content")
     status: str = Field(..., description="Newsletter status")
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     sent_at: Optional[datetime] = Field(None, description="Sent timestamp")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+    class Config:
+        populate_by_name = True  # Allow both content_html and html_content
 
     @validator('status')
     def validate_status(cls, v):
@@ -99,12 +103,14 @@ class NewsletterDetailResponse(BaseModel):
         return v
 
     class Config:
+        populate_by_name = True  # Allow both content_html and html_content
         json_schema_extra = {
             "example": {
                 "id": "newsletter-123",
                 "workspace_id": "workspace-456",
                 "title": "Weekly AI Newsletter",
-                "html_content": "<html>...</html>",
+                "content_html": "<html>...</html>",
+                "content_text": "Plain text version...",
                 "status": "sent",
                 "created_at": "2025-01-20T10:00:00Z",
                 "sent_at": "2025-01-20T11:00:00Z",

@@ -66,7 +66,7 @@ class UpdateNewsletterRequest(BaseModel):
     model_config = {"extra": "ignore"}  # Pydantic v2 syntax - ignore extra fields like 'items' from frontend
 
     title: Optional[str] = Field(None, min_length=1, max_length=200)
-    subject_line: Optional[str] = Field(None, min_length=1, max_length=200, description="Newsletter subject line (mapped to title)")
+    subject_line: Optional[str] = Field(None, max_length=200, description="Newsletter subject line (mapped to title)")  # Removed min_length to allow empty
     status: Optional[str] = Field(None, pattern="^(draft|sent|scheduled)$")
     sent_at: Optional[datetime] = None
 

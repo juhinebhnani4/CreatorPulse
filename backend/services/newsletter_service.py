@@ -18,7 +18,9 @@ from src.ai_newsletter.config.settings import get_settings
 from backend.services.trend_service import TrendDetectionService
 from backend.services.style_service import StyleAnalysisService
 from backend.services.feedback_service import FeedbackService
+from backend.services.claude_newsletter_generator import ClaudeNewsletterGenerator
 from backend.config.constants import NewsletterConstants
+from backend.settings import settings
 
 
 class NewsletterService:
@@ -43,24 +45,27 @@ class NewsletterService:
         Raises:
             ValueError: If no valid API key is found
         """
+        has_anthropic = bool(settings.anthropic_api_key)
         has_openai = bool(self.settings.newsletter.openai_api_key)
         has_openrouter = bool(self.settings.newsletter.openrouter_api_key)
 
-        if not has_openai and not has_openrouter:
+        if not has_anthropic and not has_openai and not has_openrouter:
             raise ValueError(
-                "No AI API key configured. Set either OPENAI_API_KEY or OPENROUTER_API_KEY in your .env file"
+                "No AI API key configured. Set ANTHROPIC_API_KEY in your .env file"
             )
 
         # Log which API is available (without exposing keys)
         # SECURITY: Never log API keys or credentials, even partially
+        if has_anthropic:
+            print("[NewsletterService] [OK] Anthropic Claude API configured")
         if has_openai:
-            print("[NewsletterService] OpenAI API configured")
+            print("[NewsletterService] [WARNING] OpenAI API configured (deprecated, using Claude)")
         if has_openrouter:
-            print("[NewsletterService] OpenRouter API configured")
+            print("[NewsletterService] [INFO] OpenRouter API configured (backup only)")
 
-        # Warn if using OpenRouter but key is missing
-        if self.settings.newsletter.use_openrouter and not has_openrouter:
-            print("[NewsletterService] WARNING: USE_OPENROUTER=true but OPENROUTER_API_KEY is missing. Falling back to OpenAI.")
+        # Use Claude by default
+        if not has_anthropic:
+            print("[NewsletterService] [WARNING] ANTHROPIC_API_KEY not set. Please add it to .env file")
 
     async def generate_newsletter(
         self,
@@ -194,59 +199,68 @@ class NewsletterService:
         if not content_items_for_generator:
             raise ValueError("No valid content items after conversion")
 
-        # Initialize newsletter generator
-        generator = NewsletterGenerator(config=self.settings.newsletter)
-
-        # Override settings
-        generator.config.tone = tone
-        generator.config.language = language
-        generator.config.temperature = temperature
-
-        # Handle model selection
-        if use_openrouter:
-            generator.config.use_openrouter = True
-            if model:
-                generator.config.openrouter_model = model
-                generator.model = model
-            else:
-                generator.model = generator.config.openrouter_model
-
-            # Reinitialize client with OpenRouter
-            from openai import OpenAI
-            generator.client = OpenAI(
-                api_key=self.settings.newsletter.openrouter_api_key,
-                base_url="https://openrouter.ai/api/v1"
+        # Check if we should use OpenRouter or direct Anthropic API
+        if settings.use_openrouter:
+            # Use OpenRouter (via original NewsletterGenerator)
+            print(f"[NewsletterService] [INFO] Using Claude via OpenRouter")
+            return await self._generate_with_openrouter(
+                workspace_id, title, tone, temperature, language,
+                content_items_for_generator, content_items_dicts,
+                sources, days_back, trends, style_profile
             )
         else:
-            generator.config.use_openrouter = False
-            if model:
-                generator.config.model = model
-                generator.model = model
-            else:
-                generator.model = self.settings.newsletter.model
+            # Use direct Anthropic API (Claude)
+            print(f"[NewsletterService] [INFO] Using Claude direct API")
+            # Initialize Claude newsletter generator
+            claude_generator = ClaudeNewsletterGenerator(settings)
 
-            # Reinitialize client with OpenAI
-            from openai import OpenAI
-            generator.client = OpenAI(api_key=self.settings.newsletter.openai_api_key)
+        # Convert ContentItem objects to dicts for Claude generator
+        items_for_claude = []
+        for item in content_items_for_generator:
+            items_for_claude.append({
+                'title': item.title,
+                'source': item.source,
+                'author': item.author or 'Unknown',
+                'source_url': item.source_url,
+                'summary': item.summary or item.content[:200] if item.content else 'No content',
+                'content': item.content
+            })
 
-        # Generate style-specific prompt if profile exists
-        style_prompt = None
-        if style_profile:
-            style_prompt = self.style_service.generate_style_prompt(style_profile)
-
-        # Generate newsletter with trends context and style guidance
-        html_content = generator.generate_newsletter(
-            content_items_for_generator,
+        # Generate newsletter content using Claude
+        print(f"[NewsletterService] [INFO] Calling Claude API with {len(items_for_claude)} items")
+        claude_result = claude_generator.generate_newsletter_content(
+            items=items_for_claude,
             title=title,
-            max_items=max_items,
-            trends=[{
-                'topic': trend.topic,
-                'keywords': trend.keywords,
-                'strength_score': trend.strength_score,
-                'explanation': trend.explanation
-            } for trend in trends] if trends else None,
-            style_prompt=style_prompt
+            tone=tone
         )
+
+        # Extract HTML content from Claude result
+        # Claude returns: {"title": "...", "intro": "...", "content": "...", "footer": "..."}
+        html_content = f"""
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
+                h1 {{ color: #333; border-bottom: 2px solid #4A90E2; padding-bottom: 10px; }}
+                h2 {{ color: #4A90E2; margin-top: 30px; }}
+                p {{ margin: 15px 0; }}
+                a {{ color: #4A90E2; text-decoration: none; }}
+                a:hover {{ text-decoration: underline; }}
+                .intro {{ font-size: 1.1em; color: #555; font-style: italic; margin: 20px 0; }}
+                .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; color: #777; font-size: 0.9em; }}
+            </style>
+        </head>
+        <body>
+            <h1>{claude_result.get('title', title)}</h1>
+            <div class="intro">{claude_result.get('intro', '')}</div>
+            <div class="content">
+                {claude_result.get('content', '')}
+            </div>
+            <div class="footer">{claude_result.get('footer', '')}</div>
+        </body>
+        </html>
+        """
 
         # Debug: Check HTML content
         print(f"[DEBUG] Newsletter generation completed")
@@ -275,14 +289,91 @@ class NewsletterService:
             html_content=html_content,
             plain_text_content=None,  # TODO: Generate plain text version
             content_item_ids=content_item_ids,
-            model_used=generator.model,
+            model_used=settings.anthropic_model,  # Use Claude model
             temperature=temperature,
             tone=tone,
             language=language,
             metadata={
                 'sources': sources or [],
                 'days_back': days_back,
-                'use_openrouter': use_openrouter,
+                'use_claude': True,  # Track that Claude was used
+                'trends_used': [trend.topic for trend in trends] if trends else [],
+                'trend_boosted_items': len([item for item in content_items_dicts if item.get('trend_boosted', False)]),
+                'style_profile_applied': style_profile is not None,
+                'style_tone': style_profile.tone if style_profile else None,
+                'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
+            }
+        )
+
+        return {
+            'newsletter': newsletter,
+            'content_items_count': len(content_items_dicts),
+            'sources_used': list(set(item.get('source', 'unknown') for item in content_items_dicts)),
+            'trends_applied': len(trends) if trends else 0,
+            'trend_boosted_items': len([item for item in content_items_dicts if item.get('trend_boosted', False)]),
+            'style_profile_applied': style_profile is not None,
+            'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
+        }
+
+    async def _generate_with_openrouter(
+        self,
+        workspace_id: str,
+        title: str,
+        tone: str,
+        temperature: float,
+        language: str,
+        content_items_for_generator: List[Any],
+        content_items_dicts: List[Dict],
+        sources: List[str],
+        days_back: int,
+        trends: List[Any],
+        style_profile: Any
+    ) -> Dict[str, Any]:
+        """
+        Generate newsletter using OpenRouter (Claude via OpenRouter API).
+
+        This method uses the original NewsletterGenerator which supports OpenRouter.
+        """
+        print(f"[NewsletterService] [INFO] Initializing NewsletterGenerator with OpenRouter")
+
+        # Use the original generator which has OpenRouter support
+        generator = NewsletterGenerator(self.settings)
+
+        # Generate newsletter using OpenRouter
+        result = generator.generate_newsletter(
+            title=title,
+            content_items=content_items_for_generator,
+            tone=tone,
+            temperature=temperature,
+            language=language,
+            max_tokens=self.settings.newsletter.max_tokens
+        )
+
+        html_content = result['html']
+        plain_text_content = result.get('text', '')
+
+        # Extract content item IDs
+        content_item_ids = []
+        for item_dict in content_items_dicts:
+            item_id = item_dict.get('id') or item_dict.get('metadata', {}).get('id')
+            if item_id:
+                content_item_ids.append(item_id)
+
+        # Save to database
+        newsletter = self.supabase.save_newsletter(
+            workspace_id=workspace_id,
+            title=title,
+            html_content=html_content,
+            plain_text_content=plain_text_content,
+            content_item_ids=content_item_ids,
+            model_used=self.settings.newsletter.openrouter_model or "anthropic/claude-3.5-sonnet",
+            temperature=temperature,
+            tone=tone,
+            language=language,
+            metadata={
+                'sources': sources or [],
+                'days_back': days_back,
+                'use_openrouter': True,
                 'trends_used': [trend.topic for trend in trends] if trends else [],
                 'trend_boosted_items': len([item for item in content_items_dicts if item.get('trend_boosted', False)]),
                 'style_profile_applied': style_profile is not None,

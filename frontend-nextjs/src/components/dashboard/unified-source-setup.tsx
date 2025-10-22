@@ -13,14 +13,16 @@ interface ParsedSource {
   icon: string;
   displayName: string;
   description?: string;
+  isDuplicate?: boolean;
 }
 
 interface UnifiedSourceSetupProps {
   onSourcesAdded: (sources: ParsedSource[]) => void;
   isLoading?: boolean;
+  existingSources?: any[];
 }
 
-export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false }: UnifiedSourceSetupProps) {
+export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false, existingSources = [] }: UnifiedSourceSetupProps) {
   const [input, setInput] = useState('');
   const { toast } = useToast();
 
@@ -160,6 +162,23 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false }: Unifie
       }
     }
 
+    // Generic URL fallback - try to detect as RSS feed
+    if (/^https?:\/\/.+/i.test(trimmed)) {
+      const cleanDomain = cleanRssUrl(trimmed);
+
+      // Auto-append /feed suffix for common blog platforms
+      // Most blogs (WordPress, Ghost, Medium, etc.) have RSS at /feed
+      const feedUrl = trimmed.endsWith('/') ? `${trimmed}feed` : `${trimmed}/feed`;
+
+      return {
+        type: 'rss',
+        value: feedUrl,
+        icon: '📰',
+        displayName: cleanDomain,
+        description: 'RSS feed (auto-detected)',
+      };
+    }
+
     return null;
   };
 
@@ -173,9 +192,42 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false }: Unifie
         // Create unique key for deduplication
         const key = `${source.type}-${source.displayName.toLowerCase()}`;
 
-        // Only add if not already present (deduplication)
+        // Check if duplicate of existing sources
+        const isDuplicateOfExisting = existingSources.some((existing: any) => {
+          const sourceType = source.type === 'twitter' ? 'x' : source.type;
+          const existingType = existing.type === 'twitter' ? 'x' : existing.type;
+
+          if (sourceType !== existingType) return false;
+
+          // Type-specific comparison
+          if (source.type === 'reddit') {
+            return existing.config?.subreddits?.some((s: string) =>
+              `r/${s}`.toLowerCase() === source.displayName.toLowerCase()
+            );
+          } else if (source.type === 'twitter') {
+            return existing.config?.usernames?.some((u: string) =>
+              `@${u}`.toLowerCase() === source.displayName.toLowerCase()
+            );
+          } else if (source.type === 'youtube') {
+            return existing.config?.channels?.some((c: string) =>
+              c.toLowerCase() === source.value.toLowerCase()
+            );
+          } else if (source.type === 'rss') {
+            return existing.config?.feeds?.some((f: any) =>
+              f.url === source.value
+            );
+          } else if (source.type === 'blog') {
+            return existing.config?.urls?.some((u: string) =>
+              u === source.value
+            );
+          }
+
+          return false;
+        });
+
+        // Only add if not already present in textarea (deduplication)
         if (!sourcesMap.has(key)) {
-          sourcesMap.set(key, source);
+          sourcesMap.set(key, { ...source, isDuplicate: isDuplicateOfExisting });
         }
       }
     }
@@ -384,12 +436,18 @@ https://blog.openai.com/feed
                   {parseInput().map((source, idx) => (
                     <div
                       key={idx}
-                      className="flex items-start gap-3 animate-slide-up"
+                      className={`flex items-start gap-3 animate-slide-up ${
+                        source.isDuplicate ? 'opacity-60' : ''
+                      }`}
                       style={{ animationDelay: `${idx * 50}ms` }}
                     >
-                      {/* Checkmark + Icon */}
+                      {/* Checkmark or Warning Icon */}
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-success text-lg">✓</span>
+                        {source.isDuplicate ? (
+                          <span className="text-yellow-500 text-lg">⚠️</span>
+                        ) : (
+                          <span className="text-success text-lg">✓</span>
+                        )}
                         <span className="text-xl">{source.icon}</span>
                       </div>
 
@@ -397,7 +455,14 @@ https://blog.openai.com/feed
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2 flex-wrap">
                           <span className="font-semibold text-foreground">{source.displayName}</span>
-                          <span className="text-xs text-muted-foreground">→ {source.type === 'reddit' ? 'Reddit' : source.type === 'rss' ? 'RSS Feed' : 'Twitter'}</span>
+                          <span className="text-xs text-muted-foreground">
+                            → {source.type === 'reddit' ? 'Reddit' : source.type === 'rss' ? 'RSS Feed' : source.type === 'twitter' ? 'Twitter' : source.type === 'youtube' ? 'YouTube' : 'Blog'}
+                          </span>
+                          {source.isDuplicate && (
+                            <span className="text-xs text-yellow-600 dark:text-yellow-400 font-medium">
+                              (already added)
+                            </span>
+                          )}
                         </div>
                         {source.description && (
                           <div className="text-xs text-muted-foreground mt-0.5">

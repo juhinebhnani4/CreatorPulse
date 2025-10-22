@@ -181,7 +181,7 @@ async def get_newsletter_analytics(
         # Verify user has access to this workspace
         await verify_workspace_access(
             UUID(analytics["workspace_id"]),
-            current_user["id"]
+            current_user
         )
 
         return APIResponse.success_response(data=analytics)
@@ -227,7 +227,7 @@ async def recalculate_newsletter_analytics(
         # Verify access
         await verify_workspace_access(
             UUID(analytics["workspace_id"]),
-            current_user["id"]
+            current_user
         )
 
         # Recalculate
@@ -276,7 +276,7 @@ async def get_workspace_analytics_summary(
     """
     try:
         # Verify access
-        await verify_workspace_access(workspace_id, current_user["id"])
+        await verify_workspace_access(workspace_id, current_user)
 
         analytics_service = AnalyticsService()
 
@@ -321,7 +321,7 @@ async def get_content_performance(
     """
     try:
         # Verify access
-        await verify_workspace_access(workspace_id, current_user["id"])
+        await verify_workspace_access(workspace_id, current_user)
 
         analytics_service = AnalyticsService()
 
@@ -371,7 +371,7 @@ async def export_analytics_data(
     """
     try:
         # Verify access
-        await verify_workspace_access(workspace_id, current_user["id"])
+        await verify_workspace_access(workspace_id, current_user)
 
         analytics_service = AnalyticsService()
 
@@ -451,7 +451,7 @@ async def get_dashboard_analytics(
     """
     try:
         # Verify access
-        await verify_workspace_access(workspace_id, current_user["id"])
+        await verify_workspace_access(workspace_id, current_user)
 
         # Parse period
         period_map = {

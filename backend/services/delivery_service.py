@@ -109,8 +109,8 @@ class DeliveryService:
                     success = self.email_sender.send_newsletter(
                         to_email=subscriber['email'],
                         subject=newsletter['title'],
-                        html_content=newsletter['html_content'],
-                        text_content=newsletter.get('plain_text_content')
+                        html_content=newsletter['content_html'],
+                        text_content=newsletter.get('content_text')
                     )
 
                     if success:
@@ -176,8 +176,8 @@ class DeliveryService:
             success = self.email_sender.send_newsletter(
                 to_email=test_email,
                 subject=f"[TEST] {newsletter['title']}",
-                html_content=newsletter['html_content'],
-                text_content=newsletter.get('plain_text_content')
+                html_content=newsletter['content_html'],
+                text_content=newsletter.get('content_text')
             )
 
             if success:

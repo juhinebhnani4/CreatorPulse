@@ -12,7 +12,8 @@ export interface Newsletter {
   scheduled_at?: string;
   sent_at?: string;
   metadata?: Record<string, any>;
-  created_at: string;
+  created_at?: string;
+  generated_at: string;
   updated_at: string;
 }
 

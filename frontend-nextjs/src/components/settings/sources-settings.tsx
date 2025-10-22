@@ -38,6 +38,58 @@ export function SourcesSettings() {
   const [justAdded, setJustAdded] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
 
+  // Detect duplicate sources
+  const detectDuplicates = (): { identifier: string; count: number; type: string }[] => {
+    const counts = new Map<string, { count: number; type: string }>();
+
+    // Count Reddit duplicates
+    redditSubreddits.forEach(sub => {
+      const key = `reddit:${sub.toLowerCase()}`;
+      const existing = counts.get(key) || { count: 0, type: 'reddit' };
+      counts.set(key, { ...existing, count: existing.count + 1 });
+    });
+
+    // Count RSS duplicates
+    rssFeeds.forEach(feed => {
+      const key = `rss:${feed}`;
+      const existing = counts.get(key) || { count: 0, type: 'rss' };
+      counts.set(key, { ...existing, count: existing.count + 1 });
+    });
+
+    // Count Twitter duplicates
+    twitterUsers.forEach(user => {
+      const key = `twitter:${user.toLowerCase()}`;
+      const existing = counts.get(key) || { count: 0, type: 'twitter' };
+      counts.set(key, { ...existing, count: existing.count + 1 });
+    });
+
+    // Count YouTube duplicates
+    youtubeChannels.forEach(channel => {
+      const key = `youtube:${channel.toLowerCase()}`;
+      const existing = counts.get(key) || { count: 0, type: 'youtube' };
+      counts.set(key, { ...existing, count: existing.count + 1 });
+    });
+
+    // Count Blog duplicates
+    blogUrls.forEach(url => {
+      const key = `blog:${url}`;
+      const existing = counts.get(key) || { count: 0, type: 'blog' };
+      counts.set(key, { ...existing, count: existing.count + 1 });
+    });
+
+    // Return only duplicates (count > 1)
+    return Array.from(counts.entries())
+      .filter(([_, data]) => data.count > 1)
+      .map(([key, data]) => ({
+        identifier: key.split(':')[1],
+        count: data.count,
+        type: data.type
+      }));
+  };
+
+  const duplicates = detectDuplicates();
+  const totalDuplicates = duplicates.reduce((sum, d) => sum + (d.count - 1), 0);
+
   // Load workspace configuration on mount
   useEffect(() => {
     const loadConfig = async () => {
@@ -70,6 +122,19 @@ export function SourcesSettings() {
           };
 
           config.sources.forEach((source: any) => {
+            // FIX 1: Filter out empty source configs (no actual sources configured)
+            const hasContent =
+              (source.config?.subreddits && source.config.subreddits.length > 0) ||
+              (source.config?.feeds && source.config.feeds.length > 0) ||
+              (source.config?.usernames && source.config.usernames.length > 0) ||
+              (source.config?.channels && source.config.channels.length > 0) ||
+              (source.config?.urls && source.config.urls.length > 0);
+
+            if (!hasContent) {
+              console.warn(`[Settings] Filtering out empty ${source.type} source config with no actual sources`);
+              return; // Skip this source entirely
+            }
+
             // Handle disabled sources separately
             if (!source.enabled) {
               // Extract identifiers from disabled sources
@@ -325,6 +390,7 @@ export function SourcesSettings() {
       });
 
       // Build the config object matching backend schema
+      // FIX 2: Only create source objects when they have actual content (length > 0)
       const config = {
         sources: [
           // Enabled sources
@@ -382,6 +448,21 @@ export function SourcesSettings() {
         ]
       };
 
+      // FIX 2 (Extra Safety): Filter out any sources with empty configs before saving
+      config.sources = config.sources.filter((source: any) => {
+        const hasContent =
+          (source.config?.subreddits && source.config.subreddits.length > 0) ||
+          (source.config?.feeds && source.config.feeds.length > 0) ||
+          (source.config?.usernames && source.config.usernames.length > 0) ||
+          (source.config?.channels && source.config.channels.length > 0) ||
+          (source.config?.urls && source.config.urls.length > 0);
+
+        if (!hasContent) {
+          console.warn(`[Settings] Preventing save of empty ${source.type} source config`);
+        }
+        return hasContent;
+      });
+
       await api.workspaces.saveConfig(workspace.id, config);
 
       toast({
@@ -418,6 +499,17 @@ export function SourcesSettings() {
         return;
       }
 
+      // Check for duplicates (case-insensitive)
+      if (redditSubreddits.some(sub => sub.toLowerCase() === cleaned.toLowerCase())) {
+        toast({
+          title: 'Duplicate Source',
+          description: `r/${cleaned} is already in your sources`,
+          variant: 'destructive',
+        });
+        setIsAdding(false);
+        return;
+      }
+
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 500));
       setRedditSubreddits([...redditSubreddits, cleaned]);
@@ -444,8 +536,21 @@ export function SourcesSettings() {
   const addRssFeed = async () => {
     if (newValue.trim()) {
       setIsAdding(true);
+      const cleanedUrl = newValue.trim();
+
+      // Check for duplicates (case-sensitive for URLs)
+      if (rssFeeds.some(feed => feed === cleanedUrl)) {
+        toast({
+          title: 'Duplicate Source',
+          description: 'This RSS feed is already in your sources',
+          variant: 'destructive',
+        });
+        setIsAdding(false);
+        return;
+      }
+
       await new Promise(resolve => setTimeout(resolve, 500));
-      setRssFeeds([...rssFeeds, newValue.trim()]);
+      setRssFeeds([...rssFeeds, cleanedUrl]);
       setNewValue('');
       setIsAdding(false);
       setJustAdded(true);
@@ -481,8 +586,20 @@ export function SourcesSettings() {
         return;
       }
 
-      await new Promise(resolve => setTimeout(resolve, 500));
       const username = newValue.trim().replace(/^@/, ''); // Remove @ if user adds it
+
+      // Check for duplicates (case-insensitive)
+      if (twitterUsers.some(user => user.toLowerCase() === username.toLowerCase())) {
+        toast({
+          title: 'Duplicate Source',
+          description: `@${username} is already in your sources`,
+          variant: 'destructive',
+        });
+        setIsAdding(false);
+        return;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 500));
       setTwitterUsers([...twitterUsers, username]);
       setNewValue('');
       setIsAdding(false);
@@ -507,8 +624,29 @@ export function SourcesSettings() {
   const addYoutubeChannel = async () => {
     if (newValue.trim()) {
       setIsAdding(true);
+      const cleanedChannel = newValue.trim();
+
+      // Check for duplicates (case-sensitive for URLs/IDs, case-insensitive for handles)
+      const isDuplicate = youtubeChannels.some(ch => {
+        // Exact match for URLs and channel IDs
+        if (ch === cleanedChannel) return true;
+        // Case-insensitive for handles (@username)
+        if (ch.toLowerCase() === cleanedChannel.toLowerCase()) return true;
+        return false;
+      });
+
+      if (isDuplicate) {
+        toast({
+          title: 'Duplicate Source',
+          description: 'This YouTube channel is already in your sources',
+          variant: 'destructive',
+        });
+        setIsAdding(false);
+        return;
+      }
+
       await new Promise(resolve => setTimeout(resolve, 500));
-      setYoutubeChannels([...youtubeChannels, newValue.trim()]);
+      setYoutubeChannels([...youtubeChannels, cleanedChannel]);
       setNewValue('');
       setIsAdding(false);
       setJustAdded(true);
@@ -532,8 +670,21 @@ export function SourcesSettings() {
   const addBlogUrl = async () => {
     if (newValue.trim()) {
       setIsAdding(true);
+      const cleanedUrl = newValue.trim();
+
+      // Check for duplicates (case-sensitive for URLs)
+      if (blogUrls.some(url => url === cleanedUrl)) {
+        toast({
+          title: 'Duplicate Source',
+          description: 'This blog URL is already in your sources',
+          variant: 'destructive',
+        });
+        setIsAdding(false);
+        return;
+      }
+
       await new Promise(resolve => setTimeout(resolve, 500));
-      setBlogUrls([...blogUrls, newValue.trim()]);
+      setBlogUrls([...blogUrls, cleanedUrl]);
       setNewValue('');
       setIsAdding(false);
       setJustAdded(true);
@@ -702,6 +853,50 @@ export function SourcesSettings() {
 
   return (
     <div className="space-y-6">
+      {/* Duplicate Warning Banner */}
+      {totalDuplicates > 0 && (
+        <div className="flex items-start gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+          <div className="flex-shrink-0 mt-0.5">
+            <svg className="h-5 w-5 text-yellow-600 dark:text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
+              {totalDuplicates} Duplicate Source{totalDuplicates !== 1 ? 's' : ''} Detected
+            </h4>
+            <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+              You have duplicate sources configured which causes inefficient scraping. The backend will automatically deduplicate them, but you should remove duplicates from your configuration.
+            </p>
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium text-yellow-800 dark:text-yellow-200 hover:text-yellow-900 dark:hover:text-yellow-100">
+                View {duplicates.length} duplicate source{duplicates.length !== 1 ? 's' : ''}
+              </summary>
+              <ul className="mt-2 space-y-1 ml-4">
+                {duplicates.map((dup, idx) => (
+                  <li key={idx} className="text-yellow-700 dark:text-yellow-300">
+                    <span className="font-mono">
+                      {dup.type === 'reddit' && `r/${dup.identifier}`}
+                      {dup.type === 'twitter' && `@${dup.identifier}`}
+                      {dup.type !== 'reddit' && dup.type !== 'twitter' && dup.identifier}
+                    </span>
+                    <span className="ml-2 text-xs">({dup.count} copies)</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowManageModal(true)}
+            className="flex-shrink-0"
+          >
+            Manage Sources
+          </Button>
+        </div>
+      )}
+
       {/* Header with count and Manage button */}
       <div className="flex items-center justify-between">
         <div>

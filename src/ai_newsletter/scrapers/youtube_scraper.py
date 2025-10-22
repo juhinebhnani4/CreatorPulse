@@ -158,19 +158,57 @@ class YouTubeScraper(BaseScraper):
         order: str,
         published_after: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
-        """Fetch videos from a channel by username."""
-        # Get channel ID from username
-        channel_response = self.youtube.channels().list(
-            part='id',
-            forUsername=username
-        ).execute()
+        """Fetch videos from a channel by username with fallback to search."""
 
-        if 'items' not in channel_response or not channel_response['items']:
-            self.logger.error(f"Channel not found: {username}")
-            return []
+        # Method 1: Try forUsername (works for legacy usernames)
+        try:
+            self.logger.info(f"Trying forUsername lookup: {username}")
+            channel_response = self.youtube.channels().list(
+                part='id',
+                forUsername=username
+            ).execute()
 
-        channel_id = channel_response['items'][0]['id']
-        return self._fetch_channel_videos(channel_id, limit, order, published_after)
+            if channel_response.get('items'):
+                channel_id = channel_response['items'][0]['id']
+                self.logger.info(f"OK: Found by username: {username} → {channel_id}")
+                return self._fetch_channel_videos(channel_id, limit, order, published_after)
+        except Exception as e:
+            self.logger.warning(f"forUsername failed for {username}: {e}")
+
+        # Method 2: Search for channel (works for handles and names)
+        try:
+            self.logger.info(f"Searching YouTube for channel: {username}")
+            search_response = self.youtube.search().list(
+                part='snippet',
+                q=username,
+                type='channel',
+                maxResults=5
+            ).execute()
+
+            if search_response.get('items'):
+                # Find best match (exact name or handle match)
+                for item in search_response['items']:
+                    channel_title = item['snippet']['title'].lower()
+                    channel_id = item['id']['channelId']
+
+                    # Exact match or very close match
+                    if username.lower() in channel_title or channel_title in username.lower():
+                        self.logger.info(f"OK: Found by search: {username} → {channel_id} ({item['snippet']['title']})")
+                        return self._fetch_channel_videos(channel_id, limit, order, published_after)
+
+                # No exact match, use first result
+                channel_id = search_response['items'][0]['id']['channelId']
+                channel_title = search_response['items'][0]['snippet']['title']
+                self.logger.warning(f"WARNING:  Using first search result for '{username}': {channel_title}")
+                return self._fetch_channel_videos(channel_id, limit, order, published_after)
+
+        except HttpError as e:
+            self.logger.error(f"YouTube API search failed for {username}: {e}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error searching for {username}: {e}")
+
+        self.logger.error(f"ERROR: Channel not found: {username}")
+        return []
     
     def _fetch_playlist_videos(
         self,

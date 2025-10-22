@@ -20,19 +20,35 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+import json
 
 from backend.settings import settings
 from backend.middleware.cors import setup_cors
 from backend.middleware.rate_limiter import limiter
 from backend.models.responses import APIResponse
 
-# Create FastAPI app
+
+# Custom JSONResponse that handles Unicode properly
+class UnicodeJSONResponse(JSONResponse):
+    """JSONResponse that properly handles Unicode characters (emojis, etc.)"""
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,  # Don't escape Unicode characters
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+
+# Create FastAPI app with custom response class
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Frontend-agnostic REST API for CreatorPulse AI Newsletter Generator",
     docs_url="/docs" if settings.debug else None,  # Disable docs in production
     redoc_url="/redoc" if settings.debug else None,
+    default_response_class=UnicodeJSONResponse,  # Use Unicode-aware JSON responses
 )
 
 # Add rate limiting
@@ -50,7 +66,7 @@ setup_cors(app)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle validation errors with consistent format."""
-    return JSONResponse(
+    return UnicodeJSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=APIResponse.error_response(
             code="VALIDATION_ERROR",
@@ -65,7 +81,7 @@ async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected errors."""
     if settings.debug:
         # In debug mode, show full error
-        return JSONResponse(
+        return UnicodeJSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=APIResponse.error_response(
                 code="INTERNAL_ERROR",
@@ -75,7 +91,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         )
     else:
         # In production, hide error details
-        return JSONResponse(
+        return UnicodeJSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=APIResponse.error_response(
                 code="INTERNAL_ERROR",

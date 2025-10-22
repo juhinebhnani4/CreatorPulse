@@ -50,3 +50,4 @@ Pillow>=10.0.0
 # black
 # flake8
 # mypy
+anthropic==0.71.0

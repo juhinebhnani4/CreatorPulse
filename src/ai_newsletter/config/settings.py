@@ -82,7 +82,7 @@ class NewsletterConfig:
     # OpenRouter configuration
     use_openrouter: bool = False
     openrouter_api_key: Optional[str] = None
-    openrouter_model: str = "anthropic/claude-3.5-sonnet"
+    openrouter_model: str = "meta-llama/llama-3.2-3b-instruct:free"
 
 
 @dataclass
@@ -218,7 +218,7 @@ class Settings:
         # OpenRouter configuration from env
         settings.newsletter.use_openrouter = os.getenv('USE_OPENROUTER', 'false').lower() == 'true'
         settings.newsletter.openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
-        settings.newsletter.openrouter_model = os.getenv('OPENROUTER_MODEL', 'anthropic/claude-3.5-sonnet')
+        settings.newsletter.openrouter_model = os.getenv('OPENROUTER_MODEL', 'meta-llama/llama-3.2-3b-instruct:free')
         
         # Email configuration from env
         settings.email.smtp_server = os.getenv('SMTP_SERVER')

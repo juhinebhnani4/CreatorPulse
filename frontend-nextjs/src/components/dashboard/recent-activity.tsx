@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { SampleDataBadge } from '@/components/ui/sample-data-badge';
 import { Clock, CheckCircle2, Calendar, Zap } from 'lucide-react';
 
 interface Activity {
@@ -45,6 +46,7 @@ const mockActivities: Activity[] = [
 ];
 
 export function RecentActivity({ activities = mockActivities }: RecentActivityProps) {
+  const isUsingMockData = activities === mockActivities;
   const getIcon = (type: Activity['type']) => {
     switch (type) {
       case 'scrape':
@@ -110,10 +112,18 @@ export function RecentActivity({ activities = mockActivities }: RecentActivityPr
   return (
     <Card className="border-0 shadow-lg">
       <CardHeader className="pb-3">
-        <CardTitle className="text-xl font-bold flex items-center gap-2">
-          <Clock className="h-5 w-5 text-primary" />
-          Recent Activity
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-xl font-bold flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            Recent Activity
+          </CardTitle>
+          {isUsingMockData && (
+            <SampleDataBadge
+              tooltip="This is example activity data. Your actual scraping, generation, and sending events will appear here."
+              className="text-xs"
+            />
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">

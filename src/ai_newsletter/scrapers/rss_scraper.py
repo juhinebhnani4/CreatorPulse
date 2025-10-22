@@ -81,11 +81,18 @@ class RSSFeedScraper(BaseScraper):
                         item = self._parse_item(entry)
                         item.metadata['feed_url'] = url
                         item.metadata['feed_title'] = feed.feed.get('title', '')
-                        
+
                         if self.validate_item(item):
                             all_items.append(item)
+                        else:
+                            # Enhanced logging for validation failures
+                            self.logger.debug(
+                                f"RSS item validation failed for '{entry.get('title', 'Unknown')}'. "
+                                f"Title: {bool(item.title)}, Source: {bool(item.source)}, "
+                                f"URL: {bool(item.source_url)}, Date: {bool(item.created_at)}"
+                            )
                     except Exception as e:
-                        self.logger.warning(f"Failed to parse entry: {e}")
+                        self.logger.warning(f"Failed to parse RSS entry '{entry.get('title', 'Unknown')}': {type(e).__name__}: {e}")
                         continue
                 
                 self.logger.info(f"Successfully fetched {len(entries)} entries from {url}")
@@ -93,9 +100,62 @@ class RSSFeedScraper(BaseScraper):
             except Exception as e:
                 self.logger.error(f"Error fetching feed {url}: {e}")
                 continue
-        
+
         return all_items
-    
+
+    def fetch_multiple_feeds(
+        self,
+        feed_urls: List[str],
+        limit_per_feed: int = 10
+    ) -> List[ContentItem]:
+        """
+        Fetch content from multiple RSS feeds with retry logic.
+
+        Args:
+            feed_urls: List of RSS feed URLs to fetch from
+            limit_per_feed: Maximum number of entries to fetch per feed
+
+        Returns:
+            Combined list of ContentItem objects from all feeds
+        """
+        all_items = []
+
+        for feed_url in feed_urls:
+            self.logger.info(f"Fetching RSS feed: {feed_url}")
+
+            # Retry logic with exponential backoff (matching Twitter/X pattern)
+            max_retries = 3
+            base_delay = 2  # seconds
+
+            for attempt in range(max_retries):
+                try:
+                    items = self.fetch_content(feed_url=feed_url, limit=limit_per_feed)
+                    all_items.extend(items)
+                    self.logger.info(f"Successfully fetched {len(items)} items from {feed_url}")
+                    break  # Success! Exit retry loop
+
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        # Calculate exponential backoff delay
+                        delay = base_delay * (2 ** attempt)
+                        self.logger.warning(
+                            f"RSS feed error for {feed_url} (attempt {attempt+1}/{max_retries}): {e}. "
+                            f"Waiting {delay}s before retry..."
+                        )
+                        import time
+                        time.sleep(delay)
+                    else:
+                        # Final attempt failed
+                        self.logger.error(
+                            f"RSS feed failed after {max_retries} attempts: {feed_url}. "
+                            f"Error: {type(e).__name__}: {e}"
+                        )
+                        # Continue to next feed instead of failing completely
+                        continue
+
+        self.logger.info(f"Total RSS items fetched: {len(all_items)} from {len(feed_urls)} feeds")
+        return all_items
+
     def _parse_item(self, raw_item: Any) -> ContentItem:
         """
         Parse an RSS entry into a ContentItem.

@@ -25,6 +25,202 @@ class ContentService:
     def __init__(self):
         """Initialize content service."""
         self.supabase = SupabaseManager()
+        self._twitter_cache = {}  # Cache format: {username: (items, timestamp)}
+        self._cache_ttl = 900  # 15 minutes in seconds
+
+    def _merge_source_configs(
+        self,
+        sources_list: List[Dict[str, Any]],
+        filter_sources: Optional[List[str]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Merge multiple source configs of the same type into single configs.
+
+        Fixes critical bug where multiple source objects of same type (e.g., 4 YouTube configs)
+        would only scrape the first one.
+
+        Args:
+            sources_list: List of source objects from workspace config
+            filter_sources: Optional list of source types to include (None = all enabled)
+
+        Returns:
+            Dict mapping source type to merged config
+
+        Example:
+            Input: [
+                {"type": "youtube", "enabled": True, "config": {"channels": ["ch1"]}},
+                {"type": "youtube", "enabled": True, "config": {"channels": ["ch2", "ch3"]}},
+                {"type": "reddit", "enabled": True, "config": {"subreddits": ["sub1"]}}
+            ]
+            Output: {
+                "youtube": {"channels": ["ch1", "ch2", "ch3"], "limit": 10},
+                "reddit": {"subreddits": ["sub1"], "limit": 10}
+            }
+        """
+        merged = {}
+
+        for source_obj in sources_list:
+            # Skip disabled sources
+            if not source_obj.get('enabled', False):
+                continue
+
+            source_type = source_obj.get('type')
+            if not source_type:
+                continue
+
+            # If filter specified, skip sources not in filter
+            if filter_sources is not None and source_type not in filter_sources:
+                continue
+
+            source_config = source_obj.get('config', {})
+
+            # Initialize merged config for this type if not exists
+            if source_type not in merged:
+                merged[source_type] = {
+                    'subreddits': [],      # For reddit
+                    'feeds': [],           # For RSS
+                    'usernames': [],       # For Twitter/X
+                    'channels': [],        # For YouTube
+                    'urls': [],            # For blogs
+                    'limit': source_config.get('limit', 10),
+                }
+
+            # Merge arrays based on source type
+            if source_type == 'reddit':
+                subreddits = source_config.get('subreddits', [])
+                if isinstance(subreddits, list):
+                    merged[source_type]['subreddits'].extend(subreddits)
+                elif isinstance(subreddits, str):
+                    merged[source_type]['subreddits'].append(subreddits)
+
+            elif source_type == 'rss':
+                feeds = source_config.get('feeds', [])
+                if isinstance(feeds, list):
+                    merged[source_type]['feeds'].extend(feeds)
+                # Also support legacy feed_urls format
+                feed_urls = source_config.get('feed_urls', [])
+                if isinstance(feed_urls, list):
+                    for url in feed_urls:
+                        merged[source_type]['feeds'].append({'url': url, 'name': url})
+                # Support single url
+                if 'url' in source_config:
+                    merged[source_type]['feeds'].append({
+                        'url': source_config['url'],
+                        'name': source_config['url']
+                    })
+
+            elif source_type in ['x', 'twitter']:
+                # Normalize to 'x' type
+                if source_type == 'twitter':
+                    source_type = 'x'
+                    if 'x' not in merged:
+                        merged['x'] = merged.pop('twitter', {
+                            'usernames': [],
+                            'limit': source_config.get('limit', 10)
+                        })
+
+                usernames = source_config.get('usernames', [])
+                if isinstance(usernames, list):
+                    merged[source_type]['usernames'].extend(usernames)
+                elif isinstance(usernames, str):
+                    merged[source_type]['usernames'].append(usernames)
+                # Also support legacy 'handle' format
+                if 'handle' in source_config:
+                    merged[source_type]['usernames'].append(source_config['handle'])
+
+            elif source_type == 'youtube':
+                channels = source_config.get('channels', [])
+                if isinstance(channels, list):
+                    merged[source_type]['channels'].extend(channels)
+                elif isinstance(channels, str):
+                    merged[source_type]['channels'].append(channels)
+                # Also support legacy 'url' format
+                if 'url' in source_config:
+                    merged[source_type]['channels'].append(source_config['url'])
+
+            elif source_type == 'blog':
+                urls = source_config.get('urls', [])
+                if isinstance(urls, list):
+                    merged[source_type]['urls'].extend(urls)
+                elif isinstance(urls, str):
+                    merged[source_type]['urls'].append(urls)
+                # Also support legacy 'url' format
+                if 'url' in source_config:
+                    merged[source_type]['urls'].append(source_config['url'])
+
+        # Clean up empty arrays and deduplicate
+        for source_type in list(merged.keys()):
+            config = merged[source_type]
+
+            # Deduplicate arrays (case-insensitive for usernames/subreddits)
+            if source_type == 'reddit' and config['subreddits']:
+                # Deduplicate subreddits (case-insensitive)
+                seen = set()
+                unique = []
+                for sub in config['subreddits']:
+                    sub_lower = sub.lower().strip()
+                    if sub_lower not in seen:
+                        seen.add(sub_lower)
+                        unique.append(sub)
+                config['subreddits'] = unique
+                print(f"   [Reddit] Merged to {len(unique)} unique subreddits")
+
+            if source_type in ['x', 'twitter'] and config['usernames']:
+                # Deduplicate usernames (case-insensitive)
+                seen = set()
+                unique = []
+                for user in config['usernames']:
+                    user_lower = user.lower().strip()
+                    if user_lower not in seen:
+                        seen.add(user_lower)
+                        unique.append(user)
+                config['usernames'] = unique
+                print(f"   [Twitter] Merged to {len(unique)} unique usernames")
+
+            if source_type == 'youtube' and config['channels']:
+                # Deduplicate channels
+                seen = set()
+                unique = []
+                for ch in config['channels']:
+                    ch_stripped = ch.strip()
+                    if ch_stripped not in seen:
+                        seen.add(ch_stripped)
+                        unique.append(ch_stripped)
+                config['channels'] = unique
+                print(f"   [YouTube] Merged to {len(unique)} unique channels")
+
+            if source_type == 'rss' and config['feeds']:
+                # Deduplicate RSS feeds by URL
+                seen = set()
+                unique = []
+                for feed in config['feeds']:
+                    if isinstance(feed, dict):
+                        url = feed.get('url', '').strip()
+                    else:
+                        url = str(feed).strip()
+                    if url and url not in seen:
+                        seen.add(url)
+                        unique.append(feed)
+                config['feeds'] = unique
+                print(f"   [RSS] Merged to {len(unique)} unique feeds")
+
+            if source_type == 'blog' and config['urls']:
+                # Deduplicate blog URLs
+                config['urls'] = list(set(url.strip() for url in config['urls']))
+                print(f"   [Blogs] Merged to {len(config['urls'])} unique URLs")
+
+            # Remove empty configs
+            has_content = (
+                config.get('subreddits') or
+                config.get('feeds') or
+                config.get('usernames') or
+                config.get('channels') or
+                config.get('urls')
+            )
+            if not has_content:
+                del merged[source_type]
+
+        return merged
 
     async def scrape_content(
         self,
@@ -68,44 +264,26 @@ class ContentService:
                         'config': settings
                     })
 
-        # Determine which sources to scrape
-        if sources is None:
-            # Scrape all enabled sources
-            sources = [
-                s['type'] for s in sources_list
-                if s.get('enabled', False)
-            ]
+        # Merge configs of same type to handle multiple source objects
+        # This fixes bug where multiple YouTube/Reddit/etc configs only scrape first one
+        merged_configs = self._merge_source_configs(sources_list, sources)
 
-        # Scrape content from each source
+        print(f"[SourceMerge] Merged {len(sources_list)} source objects into {len(merged_configs)} unique source types")
+
+        # Scrape content from each merged source config
         all_items: List[ContentItem] = []
         results = {}
 
-        for source in sources:
+        for source_type, merged_config in merged_configs.items():
             try:
-                # Find source config from sources_list
-                source_config = None
-                for s in sources_list:
-                    if s.get('type') == source:
-                        source_config = s.get('config', {})
-                        break
-
-                if not source_config:
-                    # Source not found in config, skip
-                    results[source] = {
-                        'success': False,
-                        'error': f'Source {source} not found in workspace config',
-                        'items_count': 0
-                    }
-                    continue
-
                 # Use override limit or config limit
-                limit = limit_per_source or source_config.get('limit', 10)
+                limit = limit_per_source or merged_config.get('limit', 10)
 
                 # Scrape based on source type
-                items = await self._scrape_source(source, source_config, limit)
+                items = await self._scrape_source(source_type, merged_config, limit)
 
                 # Store results
-                results[source] = {
+                results[source_type] = {
                     'success': True,
                     'items_count': len(items),
                     'items': items
@@ -113,7 +291,7 @@ class ContentService:
                 all_items.extend(items)
 
             except Exception as e:
-                results[source] = {
+                results[source_type] = {
                     'success': False,
                     'error': str(e),
                     'items_count': 0
@@ -215,26 +393,42 @@ class ContentService:
         return all_items[:limit]
 
     async def _scrape_rss(self, config: Dict[str, Any], limit: int) -> List[ContentItem]:
-        """Scrape RSS feeds."""
+        """Scrape RSS feeds with multiple config format support."""
         scraper = RSSFeedScraper()
 
-        # Support both single URL and array of URLs
-        feed_urls = config.get('feed_urls', [])
-        if not feed_urls and 'url' in config:
-            # Convert single URL to array
+        feed_urls = []
+
+        # Format 1: New frontend format {feeds: [{url, name}]}
+        if 'feeds' in config and isinstance(config['feeds'], list):
+            feed_urls = [feed['url'] for feed in config['feeds']
+                         if isinstance(feed, dict) and 'url' in feed]
+            print(f"[RSS] Extracted {len(feed_urls)} URLs from 'feeds' array")
+
+        # Format 2: Legacy format {feed_urls: [...]}
+        elif 'feed_urls' in config:
+            feed_urls = config['feed_urls']
+            print(f"[RSS] Found {len(feed_urls)} feeds in 'feed_urls' format")
+
+        # Format 3: Single URL {url: "..."}
+        elif 'url' in config:
             feed_urls = [config['url']]
+            print(f"[RSS] Found single feed in 'url' format")
 
         if not feed_urls:
+            print(f"[RSS] WARNING: No RSS feed URLs found in config. Config keys: {list(config.keys())}")
             return []
 
+        print(f"[RSS] Scraping {len(feed_urls)} RSS feeds...")
         items = scraper.fetch_content(
             feed_urls=feed_urls,
             limit=limit
         )
+        print(f"[RSS] Scraper returned {len(items)} items")
+
         return items
 
     async def _scrape_blog(self, config: Dict[str, Any], limit: int) -> List[ContentItem]:
-        """Scrape blog content."""
+        """Scrape blog content with retry logic and pagination support."""
         scraper = BlogScraper()
 
         # Support both single URL and array of URLs
@@ -246,15 +440,19 @@ class ContentService:
         if not urls:
             return []
 
-        all_items = []
-        for url in urls:
-            items = scraper.fetch_content_smart(url=url, limit=limit)
-            all_items.extend(items)
+        # Use the new fetch_multiple_urls method with retry logic, pagination, and smart extraction
+        all_items = scraper.fetch_multiple_urls(
+            urls=urls,
+            limit_per_url=limit,  # Use configured limit per URL
+            use_smart_extraction=True,  # Enable intelligent extraction (trafilatura, JSON-LD, etc.)
+            use_crawling=False,  # Disable deep crawling by default (can be made configurable)
+            timeout=20  # Increased timeout for slow blog servers
+        )
 
-        return all_items[:limit]
+        return all_items[:limit * len(urls)]  # Allow limit per URL, not total limit
 
     async def _scrape_x(self, config: Dict[str, Any], limit: int) -> List[ContentItem]:
-        """Scrape X (Twitter) content."""
+        """Scrape X (Twitter) content with caching to avoid rate limits."""
         import os
 
         # Extract credentials from config or environment
@@ -276,8 +474,33 @@ class ContentService:
         all_items = []
 
         for username in usernames:
-            items = scraper.fetch_user_timeline(username=username, limit=limit)
-            all_items.extend(items)
+            cache_key = f"x_{username}"
+
+            # Check cache
+            if cache_key in self._twitter_cache:
+                items, cached_at = self._twitter_cache[cache_key]
+                age = (datetime.now() - cached_at).total_seconds()
+                if age < self._cache_ttl:
+                    print(f"[Twitter] Using cached data for @{username} (age: {age:.0f}s)")
+                    all_items.extend(items)
+                    continue
+                else:
+                    print(f"[Twitter] Cache expired for @{username} (age: {age:.0f}s > {self._cache_ttl}s)")
+
+            # Fetch fresh data
+            print(f"[Twitter] Fetching fresh data for @{username}...")
+            try:
+                items = scraper.fetch_user_timeline(username=username, limit=limit)
+
+                # Cache results (even if empty, to avoid repeated failures)
+                self._twitter_cache[cache_key] = (items, datetime.now())
+                print(f"[Twitter] Cached {len(items)} tweets from @{username}")
+
+                all_items.extend(items)
+            except Exception as e:
+                print(f"[Twitter] Error fetching @{username}: {e}")
+                # Cache empty result to avoid immediate retry
+                self._twitter_cache[cache_key] = ([], datetime.now())
 
         return all_items[:limit]
 
@@ -346,7 +569,8 @@ class ContentService:
         """
         import re
 
-        identifier = identifier.strip()
+        # Clean identifier - remove whitespace, newlines, special chars
+        identifier = identifier.strip().replace('\n', '').replace('\r', '')
 
         # Handle @username format (with or without URL)
         username_match = re.search(r'@([\w-]+)', identifier)
@@ -369,12 +593,14 @@ class ContentService:
 
         # Handle plain username (no @ prefix) - treat as username
         # This covers cases like "deeplearningai" which should be "@deeplearningai"
-        if re.match(r'^[\w-]+$', identifier):
-            print(f"   YouTube: Treating '{identifier}' as username (missing @ prefix)")
-            return {'channel_username': identifier}
+        # Be more lenient - match alphanumeric, underscore, hyphen
+        clean_identifier = re.sub(r'[^\w-]', '', identifier)  # Remove any non-word chars except hyphen
+        if clean_identifier and re.match(r'^[\w-]+$', clean_identifier):
+            print(f"   YouTube: Treating '{clean_identifier}' as username (normalized from '{identifier}')")
+            return {'channel_username': clean_identifier}
 
         # If no pattern matched, return empty dict
-        print(f"   ⚠️ Could not parse YouTube identifier: {identifier}")
+        print(f"   ⚠️ Could not parse YouTube identifier: '{identifier}' (repr: {repr(identifier)})")
         return {}
 
     async def list_content(
@@ -517,28 +743,28 @@ class ContentService:
         existing_item = self.supabase.get_content_item(item_id)
 
         if not existing_item:
-            print(f"[ContentService] ❌ Item not found - raising ValueError")
+            print(f"[ContentService] ERROR: Item not found - raising ValueError")
             raise ValueError("Content item not found")
 
-        print(f"[ContentService] ✅ Found existing item in workspace: {existing_item.get('workspace_id')}")
+        print(f"[ContentService] OK: Found existing item in workspace: {existing_item.get('workspace_id')}")
 
         # Verify user has access to this workspace
         print(f"[ContentService] Verifying user has access to workspace...")
         workspace = self.supabase.get_workspace(existing_item['workspace_id'])
         if not workspace:
-            print(f"[ContentService] ❌ Workspace not found - raising ValueError")
+            print(f"[ContentService] ERROR: Workspace not found - raising ValueError")
             raise ValueError("Workspace not found")
 
-        print(f"[ContentService] ✅ User has access to workspace: {workspace.get('name')}")
+        print(f"[ContentService] OK: User has access to workspace: {workspace.get('name')}")
 
         # Update the item
         print(f"[ContentService] Calling supabase.update_content_item...")
         updated_item = self.supabase.update_content_item(item_id, updates)
         if not updated_item:
-            print(f"[ContentService] ❌ Update failed - raising ValueError")
+            print(f"[ContentService] ERROR: Update failed - raising ValueError")
             raise ValueError("Failed to update content item")
 
-        print(f"[ContentService] ✅ Item updated successfully")
+        print(f"[ContentService] OK: Item updated successfully")
         print(f"[ContentService]   - Updated title: {updated_item.get('title', '')[:50]}...")
         return updated_item
 

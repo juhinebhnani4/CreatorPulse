@@ -3,16 +3,19 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { SampleDataBadge } from '@/components/ui/sample-data-badge';
 import { FileText, ArrowRight, Clock, Sparkles, ExternalLink, TrendingUp } from 'lucide-react';
 import Image from 'next/image';
 
 interface EnhancedDraftCardProps {
-  status: 'empty' | 'ready' | 'generating' | 'scheduled';
+  status: 'empty' | 'ready' | 'generating' | 'stale' | 'scheduled';
   nextRunAt?: Date;
   onConfigureSources: () => void;
   onGenerateNow?: () => void;
   onPreviewDraft?: () => void;
   onSendNow?: () => void;
+  draftGeneratedAt?: Date;
+  newItemsCount?: number;
 }
 
 export function EnhancedDraftCard({
@@ -22,6 +25,8 @@ export function EnhancedDraftCard({
   onGenerateNow,
   onPreviewDraft,
   onSendNow,
+  draftGeneratedAt,
+  newItemsCount,
 }: EnhancedDraftCardProps) {
   // Curated trending articles (rotate randomly or use first)
   const trendingArticles = [
@@ -82,6 +87,14 @@ export function EnhancedDraftCard({
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                     className="object-cover"
                   />
+                  {/* Example badge overlay */}
+                  <div className="absolute top-2 right-2">
+                    <SampleDataBadge
+                      tooltip="This is an example article to show what your newsletter content will look like."
+                      variant="secondary"
+                      className="bg-white/90 backdrop-blur-sm"
+                    />
+                  </div>
                 </div>
 
                 <CardContent className="pt-4 pb-4">
@@ -168,6 +181,75 @@ export function EnhancedDraftCard({
                 className="hover:bg-success hover:text-success-foreground hover:border-success"
               >
                 Send Now
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Stale state - draft is outdated
+  if (status === 'stale') {
+    // Helper for time ago format
+    const formatTimeAgo = (date?: Date) => {
+      if (!date) return 'some time ago';
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
+      if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+      return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    };
+
+    return (
+      <Card className="border-2 border-orange-200 shadow-lg animate-slide-up" style={{ animationDelay: '100ms' }}>
+        <CardContent className="pt-6 pb-6">
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-orange-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">Newsletter Draft (Outdated)</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Generated {formatTimeAgo(draftGeneratedAt)}
+                    {newItemsCount && newItemsCount > 0 && ` • ${newItemsCount} new items available`}
+                  </p>
+                </div>
+              </div>
+              <Badge variant="secondary" className="bg-orange-100 text-orange-700 border-orange-300">
+                Outdated
+              </Badge>
+            </div>
+
+            {/* Info Banner */}
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <p className="text-sm text-orange-800">
+                <strong>New content is available!</strong> Regenerate your draft to include the latest items from your sources.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <Button
+                onClick={onGenerateNow}
+                className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Regenerate with New Content
+              </Button>
+              <Button
+                onClick={onPreviewDraft}
+                variant="outline"
+                className="hover:bg-muted"
+              >
+                Preview Current Draft
               </Button>
             </div>
           </div>
