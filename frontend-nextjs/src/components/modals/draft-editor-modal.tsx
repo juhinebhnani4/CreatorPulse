@@ -32,6 +32,7 @@ interface DraftEditorModalProps {
   subject: string;
   items: ContentItem[];
   onSave?: (data: { subject: string; items: ContentItem[] }) => Promise<void>;
+  onEditArticle?: (item: ContentItem) => Promise<void>;
   onSendNow?: () => void;
   onSendLater?: () => void;
   onSendTest?: () => void;
@@ -44,6 +45,7 @@ export function DraftEditorModal({
   subject: initialSubject,
   items: initialItems,
   onSave,
+  onEditArticle,
   onSendNow,
   onSendLater,
   onSendTest,
@@ -60,12 +62,13 @@ export function DraftEditorModal({
     setItems(initialItems || []);
   }, [initialSubject, initialItems]);
 
-  // Auto-save functionality
+  // Auto-save functionality (only for subject line changes)
+  // Note: Article edits are already auto-saved via onEditArticle
   useEffect(() => {
     if (!open) return;
 
     const timer = setTimeout(async () => {
-      if (onSave) {
+      if (onSave && subject !== initialSubject) {
         setIsSaving(true);
         try {
           await onSave({ subject, items });
@@ -79,12 +82,18 @@ export function DraftEditorModal({
     }, 2000); // Auto-save after 2 seconds of inactivity
 
     return () => clearTimeout(timer);
-  }, [subject, items, open, onSave]);
+  }, [subject, open, onSave]); // Only trigger on subject changes, not items
 
   const handleEditItem = async (updatedItem: ContentItem) => {
+    // Update local state for immediate UI feedback
     setItems((prev) =>
       prev.map((item) => (item.id === updatedItem.id ? updatedItem : item))
     );
+
+    // Persist to database if handler provided
+    if (onEditArticle) {
+      await onEditArticle(updatedItem);
+    }
   };
 
   const handleManualSave = async () => {

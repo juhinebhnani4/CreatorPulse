@@ -16,6 +16,9 @@ export function Toaster() {
   return (
     <ToastProvider>
       {toasts.map(function ({ id, title, description, action, ...props }) {
+        // Only render action if it's a valid React element
+        const hasValidAction = action && typeof action === 'object' && 'type' in action;
+
         return (
           <Toast key={id} {...props}>
             <div className="grid gap-1">
@@ -24,7 +27,7 @@ export function Toaster() {
                 <ToastDescription>{description}</ToastDescription>
               )}
             </div>
-            {action}
+            {hasValidAction && action}
             <ToastClose />
           </Toast>
         )

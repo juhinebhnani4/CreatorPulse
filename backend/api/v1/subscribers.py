@@ -20,6 +20,7 @@ from backend.models.subscriber import (
 )
 from backend.models.responses import APIResponse
 from backend.middleware.auth import get_current_user
+from backend.api.v1.auth import verify_workspace_access
 from ai_newsletter.database.supabase_client import SupabaseManager
 
 router = APIRouter()
@@ -41,6 +42,9 @@ async def create_subscriber(
     Requires editor or owner role.
     """
     try:
+        # SECURITY: Verify workspace access before creating subscriber
+        await verify_workspace_access(request.workspace_id, user_id)
+
         db = get_db()
 
         # Create subscriber
@@ -76,6 +80,9 @@ async def create_subscribers_bulk(
     Requires editor or owner role.
     """
     try:
+        # SECURITY: Verify workspace access before bulk creating subscribers
+        await verify_workspace_access(request.workspace_id, user_id)
+
         db = get_db()
 
         created = []

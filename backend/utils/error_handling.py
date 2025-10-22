@@ -52,8 +52,8 @@ def handle_service_errors(
                         exc_info=True,
                         extra={
                             'function': func.__name__,
-                            'args': str(args)[:200],  # Limit arg logging
-                            'kwargs': str(kwargs)[:200]
+                            'func_args': str(args)[:200],  # Renamed from 'args' to avoid conflict
+                            'func_kwargs': str(kwargs)[:200]
                         }
                     )
 
@@ -74,8 +74,8 @@ def handle_service_errors(
                         exc_info=True,
                         extra={
                             'function': func.__name__,
-                            'args': str(args)[:200],
-                            'kwargs': str(kwargs)[:200]
+                            'func_args': str(args)[:200],  # Renamed from 'args' to avoid conflict
+                            'func_kwargs': str(kwargs)[:200]
                         }
                     )
 

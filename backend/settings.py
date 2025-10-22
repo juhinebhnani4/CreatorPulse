@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
 
     # Security
-    secret_key: str = "your-secret-key-change-this-in-production"
+    # CRITICAL: secret_key MUST be set via SECRET_KEY environment variable
+    # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    secret_key: str  # No default - must be provided via environment
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
@@ -81,6 +83,40 @@ class Settings(BaseSettings):
             return f"https://{self.railway_public_domain}"
         return "http://localhost:8000"
 
+    def validate_required_settings(self) -> None:
+        """Validate that all critical settings are properly configured."""
+        errors = []
+
+        # Critical security settings
+        if not self.secret_key:
+            errors.append("SECRET_KEY environment variable is required")
+        elif self.secret_key == "your-secret-key-change-this-in-production":
+            errors.append("SECRET_KEY must be changed from default value")
+        elif len(self.secret_key) < 32:
+            errors.append("SECRET_KEY must be at least 32 characters long")
+
+        # Critical database settings
+        if not self.supabase_url:
+            errors.append("SUPABASE_URL environment variable is required")
+        if not self.supabase_key:
+            errors.append("SUPABASE_KEY environment variable is required")
+
+        if errors:
+            error_msg = "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+            raise ValueError(error_msg)
+
 
 # Global settings instance
 settings = Settings()
+
+# Validate settings on import (will fail fast if misconfigured)
+try:
+    settings.validate_required_settings()
+except ValueError as e:
+    # In development, warn but don't crash
+    if settings.environment == "development":
+        print(f"WARNING: {e}")
+        print("This is acceptable in development but MUST be fixed for production")
+    else:
+        # In production, crash immediately
+        raise

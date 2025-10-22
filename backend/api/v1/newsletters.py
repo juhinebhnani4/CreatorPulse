@@ -4,6 +4,8 @@ Newsletter API endpoints.
 
 from fastapi import APIRouter, HTTPException, status, Depends, Request
 from typing import Optional
+import logging
+import traceback
 
 from backend.models.newsletter import (
     GenerateNewsletterRequest,
@@ -19,13 +21,14 @@ from backend.middleware.rate_limiter import limiter, RateLimits
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/generate", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(RateLimits.NEWSLETTER_GENERATION)
 async def generate_newsletter(
-    http_request: Request,
-    request: GenerateNewsletterRequest,
+    request: Request,
+    newsletter_request: GenerateNewsletterRequest,
     user_id: str = Depends(get_current_user)
 ):
     """
@@ -48,16 +51,16 @@ async def generate_newsletter(
     try:
         result = await newsletter_service.generate_newsletter(
             user_id=user_id,
-            workspace_id=request.workspace_id,
-            title=request.title,
-            max_items=request.max_items,
-            days_back=request.days_back,
-            sources=request.sources,
-            tone=request.tone,
-            language=request.language,
-            temperature=request.temperature,
-            model=request.model,
-            use_openrouter=request.use_openrouter
+            workspace_id=newsletter_request.workspace_id,
+            title=newsletter_request.title,
+            max_items=newsletter_request.max_items,
+            days_back=newsletter_request.days_back,
+            sources=newsletter_request.sources,
+            tone=newsletter_request.tone,
+            language=newsletter_request.language,
+            temperature=newsletter_request.temperature,
+            model=newsletter_request.model,
+            use_openrouter=newsletter_request.use_openrouter
         )
 
         return APIResponse.success_response({
@@ -68,14 +71,39 @@ async def generate_newsletter(
         })
 
     except ValueError as e:
+        error_msg = str(e)
+        logger.warning(f"ValueError in newsletter generation: {error_msg}")
+        logger.warning(f"Traceback: {traceback.format_exc()}")
+        print(f"\n{'='*60}")
+        print(f"ValueError in newsletter generation:")
+        print(f"Error: {error_msg}")
+        print(f"Traceback: {traceback.format_exc()}")
+        print(f"{'='*60}\n")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=error_msg
         )
     except Exception as e:
+        error_type = type(e).__name__
+        error_msg = str(e)
+        error_trace = traceback.format_exc()
+
+        logger.error(f"EXCEPTION in newsletter generation:")
+        logger.error(f"Error Type: {error_type}")
+        logger.error(f"Error Message: {error_msg}")
+        logger.error(f"Full Traceback:\n{error_trace}")
+
+        print(f"\n{'='*60}")
+        print(f"EXCEPTION in newsletter generation:")
+        print(f"Error Type: {error_type}")
+        print(f"Error Message: {error_msg}")
+        print(f"\nFull Traceback:")
+        print(error_trace)
+        print(f"{'='*60}\n")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Newsletter generation failed: {str(e)}"
+            detail=f"Newsletter generation failed: {error_type}: {error_msg}"
         )
 
 
@@ -252,7 +280,7 @@ async def delete_newsletter(
 @router.post("/{newsletter_id}/regenerate", response_model=APIResponse)
 @limiter.limit(RateLimits.NEWSLETTER_GENERATION)
 async def regenerate_newsletter(
-    http_request: Request,
+    request: Request,
     newsletter_id: str,
     user_id: str = Depends(get_current_user)
 ):
@@ -327,6 +355,9 @@ async def update_newsletter(
         updates = {}
         if request.title is not None:
             updates['title'] = request.title
+        # Frontend sends subject_line, map it to title field in database
+        if request.subject_line is not None:
+            updates['title'] = request.subject_line
         if request.status is not None:
             updates['status'] = request.status
         if request.sent_at is not None:

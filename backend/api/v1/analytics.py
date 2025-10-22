@@ -154,7 +154,7 @@ async def record_analytics_event(
 )
 async def get_newsletter_analytics(
     newsletter_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),  # Returns user_id as string
 ):
     """
     Get analytics summary for a specific newsletter.
@@ -203,7 +203,7 @@ async def get_newsletter_analytics(
 )
 async def recalculate_newsletter_analytics(
     newsletter_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),  # Returns user_id as string
 ):
     """
     Recalculate analytics summary for a newsletter.
@@ -258,7 +258,7 @@ async def get_workspace_analytics_summary(
     workspace_id: UUID,
     start_date: Optional[datetime] = Query(None, description="Start date for filtering"),
     end_date: Optional[datetime] = Query(None, description="End date for filtering"),
-    current_user: dict = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),  # Returns user_id as string
 ):
     """
     Get aggregate analytics for a workspace.
@@ -309,7 +309,7 @@ async def get_workspace_analytics_summary(
 async def get_content_performance(
     workspace_id: UUID,
     limit: int = Query(20, ge=1, le=100, description="Number of items to return"),
-    current_user: dict = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),  # Returns user_id as string
 ):
     """
     Get top performing content items for a workspace.
@@ -355,7 +355,7 @@ async def export_analytics_data(
     format: str = Query("csv", description="Export format: csv or json"),
     start_date: Optional[datetime] = Query(None, description="Start date for filtering"),
     end_date: Optional[datetime] = Query(None, description="End date for filtering"),
-    current_user: dict = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),  # Returns user_id as string
 ):
     """
     Export analytics data for a workspace.
@@ -435,7 +435,7 @@ async def export_analytics_data(
 async def get_dashboard_analytics(
     workspace_id: UUID,
     period: str = Query("30d", description="Time period: 7d, 30d, 90d, 1y"),
-    current_user: dict = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),  # Returns user_id as string
 ):
     """
     Get comprehensive analytics for dashboard display.

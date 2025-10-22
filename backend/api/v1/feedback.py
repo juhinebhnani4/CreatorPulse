@@ -56,7 +56,7 @@ def get_feedback_service() -> FeedbackService:
 @router.post("/items", response_model=APIResponse)
 async def create_item_feedback(
     feedback: FeedbackItemCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),  # Returns user_id as string
     service: FeedbackService = Depends(get_feedback_service)
 ):
     """
@@ -71,19 +71,25 @@ async def create_item_feedback(
 
     Returns:
     - Created feedback with ID and metadata
+
+    Note: Workspace ID is retrieved from the content item itself for security
     """
     try:
-        # Get workspace_id from current user context (assumed to be available)
-        workspace_id = current_user.get('workspace_id')
-        if not workspace_id:
+        # Get workspace_id from the content item (ensures user has access to this content)
+        supabase = SupabaseManager()
+        content_result = supabase.service_client.table('content_items').select('workspace_id').eq('id', str(feedback.content_item_id)).single().execute()
+
+        if not content_result.data:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Workspace ID not found in user context"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Content item not found"
             )
+
+        workspace_id = content_result.data['workspace_id']
 
         result = service.record_item_feedback(
             workspace_id=str(workspace_id),
-            user_id=str(current_user['user_id']),
+            user_id=current_user,  # Already a string
             content_item_id=str(feedback.content_item_id),
             rating=feedback.rating.value,
             included_in_final=feedback.included_in_final,
@@ -95,6 +101,8 @@ async def create_item_feedback(
 
         return APIResponse.success_response(data=result)
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -174,7 +182,7 @@ async def list_item_feedback(
 @router.post("/newsletters", response_model=APIResponse)
 async def create_newsletter_feedback(
     feedback: NewsletterFeedbackCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),  # Returns user_id as string
     service: FeedbackService = Depends(get_feedback_service)
 ):
     """
@@ -190,18 +198,25 @@ async def create_newsletter_feedback(
 
     Returns:
     - Created feedback with ID and calculated metrics
+
+    Note: Workspace ID is retrieved from the newsletter itself for security
     """
     try:
-        workspace_id = current_user.get('workspace_id')
-        if not workspace_id:
+        # Get workspace_id from the newsletter (ensures user has access to this newsletter)
+        supabase = SupabaseManager()
+        newsletter_result = supabase.service_client.table('newsletters').select('workspace_id').eq('id', str(feedback.newsletter_id)).single().execute()
+
+        if not newsletter_result.data:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Workspace ID not found in user context"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Newsletter not found"
             )
+
+        workspace_id = newsletter_result.data['workspace_id']
 
         result = service.record_newsletter_feedback(
             workspace_id=str(workspace_id),
-            user_id=str(current_user['user_id']),
+            user_id=current_user,  # Already a string
             newsletter_id=str(feedback.newsletter_id),
             overall_rating=feedback.overall_rating,
             time_to_finalize_minutes=feedback.time_to_finalize_minutes,

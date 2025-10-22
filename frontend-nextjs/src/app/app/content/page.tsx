@@ -366,15 +366,28 @@ export default function ContentPage() {
                         )}
                       </div>
 
-                      <h3 className="text-lg font-semibold mb-2 hover:text-primary transition-colors">
-                        <a href={item.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
-                          <span className="line-clamp-1">{item.title}</span>
-                          <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                      <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-primary transition-colors hover:underline flex-1 truncate"
+                        >
+                          {item.title}
+                        </a>
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
+                          aria-label="Open in new tab"
+                        >
+                          <ExternalLink className="h-4 w-4" />
                         </a>
                       </h3>
 
                       <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                        {item.content}
+                        {item.summary || item.content}
                       </p>
 
                       <div className="flex items-center justify-between">

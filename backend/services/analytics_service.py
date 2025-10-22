@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 from backend.database import get_supabase_client, get_supabase_service_client
-from backend.config import settings
+from backend.settings import settings
 
 
 class AnalyticsService:

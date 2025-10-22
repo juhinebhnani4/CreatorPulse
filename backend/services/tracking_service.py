@@ -17,7 +17,7 @@ from uuid import UUID
 
 from bs4 import BeautifulSoup
 
-from backend.config import settings
+from backend.settings import settings
 
 
 class TrackingService:

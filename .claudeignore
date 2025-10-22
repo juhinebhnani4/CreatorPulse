@@ -1,0 +1,191 @@
+# .claudeignore
+# Files and directories that Claude should NOT read unless explicitly asked
+# Similar to .gitignore but for AI context prioritization
+
+# ============================================================================
+# LOW PRIORITY - Don't read unless explicitly requested
+# ============================================================================
+
+# Test Files (unless debugging tests)
+backend/tests/**
+frontend-nextjs/e2e/**
+**/__tests__/**
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Build Artifacts
+.next/**
+__pycache__/**
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Dependencies
+node_modules/**
+.venv/**
+venv/**
+env/**
+
+# Logs and Databases
+*.log
+*.sqlite
+*.db
+
+# IDE and Editor Files
+.vscode/**
+.idea/**
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment Files (contain secrets)
+.env
+.env.local
+.env.production
+.env.development
+
+# Git Files
+.git/**
+.gitignore
+
+# Historical Documentation (low priority)
+docs/_PRIORITY_3_HISTORICAL/**
+docs/SPRINT_*.md
+docs/TODO_*.md
+docs/CRITICAL_ANALYSIS_*.md
+docs/EMPTY_HTML_FIX.md
+docs/NEWSLETTER_500_ERROR_FIX.md
+
+# Temporary and Cache Files
+*.tmp
+*.cache
+.cache/**
+.pytest_cache/**
+.mypy_cache/**
+.tox/**
+
+# Coverage Reports
+htmlcov/**
+.coverage
+coverage.xml
+*.cover
+
+# Compiled Files
+*.class
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Package Files
+*.tar.gz
+*.zip
+*.rar
+
+# Media Files (unless explicitly needed)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.mp4
+*.mp3
+
+# Lock Files (auto-generated)
+package-lock.json
+yarn.lock
+poetry.lock
+Pipfile.lock
+
+# Migration Files (unless debugging migrations)
+# Uncomment if migrations are stable and don't need frequent review
+# backend/migrations/**
+
+# Auto-generated API Docs
+backend/docs/**
+
+# Jupyter Notebooks (unless explicitly working on them)
+*.ipynb
+.ipynb_checkpoints/**
+
+# Backup Files
+*.bak
+*.backup
+*.old
+
+# OS-specific Files
+Thumbs.db
+Desktop.ini
+
+# ============================================================================
+# NEVER READ - Security Risk
+# ============================================================================
+
+# Credentials and Secrets
+**/credentials.json
+**/secrets.yaml
+**/secret.txt
+**/*_secret*
+**/*_key.pem
+**/*_rsa
+**/*.key
+**/*.pem
+**/*.crt
+**/*.p12
+
+# ============================================================================
+# EXCEPTIONS - Always read these even if they match patterns above
+# ============================================================================
+
+# Documentation is allowed
+!CLAUDE.md
+!README.md
+!docs/_PRIORITY_1_CONTEXT/**
+!docs/_PRIORITY_2_REFERENCE/**
+!.claude/**
+
+# Example environment files are allowed
+!.env.example
+!.env.template
+
+# ============================================================================
+# NOTES
+# ============================================================================
+
+# This file helps Claude prioritize which files to read.
+# Files matched by patterns above should NOT be read unless:
+# 1. User explicitly asks to read them
+# 2. Debugging requires reading them (e.g., test files when fixing tests)
+# 3. They are in the exception list
+
+# Priority Reading Order:
+# 1. CLAUDE.md (always read first)
+# 2. docs/_PRIORITY_1_CONTEXT/*.md (critical context)
+# 3. .claude/instructions.md (reading strategy)
+# 4. Relevant code files based on task
+# 5. docs/_PRIORITY_2_REFERENCE/*.md (reference only)
+# 6. Everything else only if explicitly needed
+
+# To explicitly read an ignored file, user should say:
+# "Read the file [path] even though it's in .claudeignore"

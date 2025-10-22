@@ -266,26 +266,48 @@ class FeedbackService(BaseService):
     def adjust_content_scoring(
         self,
         workspace_id: str,
-        content_items: List[Dict[str, Any]],
+        content_items: List[Any],  # Can be ContentItem objects or dicts
         apply_source_quality: bool = True,
         apply_preferences: bool = True
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:  # Always returns list of dicts
         """
         Adjust content item scores based on learned preferences.
 
+        This method accepts both ContentItem dataclass objects and dictionaries,
+        and ALWAYS returns a list of dictionaries with adjusted scores.
+
         Args:
             workspace_id: Workspace ID
-            content_items: List of content items to adjust
+            content_items: List of content items (ContentItem objects or dicts)
             apply_source_quality: Whether to apply source quality scores
             apply_preferences: Whether to apply learned preferences
 
         Returns:
-            Adjusted content items with new scores
+            List of content items as dictionaries with adjusted scores
+            Each dict includes:
+            - All original fields
+            - 'original_score': The score before adjustments
+            - 'adjusted_score': The score after adjustments
+            - 'score': The final score (same as adjusted_score)
+            - 'adjustments': List of adjustment descriptions
         """
         self.logger.info(f"Adjusting content scoring for workspace {workspace_id}, {len(content_items)} items")
         adjusted_items = []
         adjustments_made = 0
         quality_scores_applied = {}
+
+        # Convert ContentItem objects to dicts if needed
+        items_as_dicts = []
+        for item in content_items:
+            if hasattr(item, 'to_dict'):
+                # It's a ContentItem object
+                items_as_dicts.append(item.to_dict())
+            elif isinstance(item, dict):
+                # Already a dict
+                items_as_dicts.append(item)
+            else:
+                # Unknown type - convert to dict manually
+                items_as_dicts.append(dict(item))
 
         # Get source quality scores
         source_scores = {}
@@ -299,7 +321,7 @@ class FeedbackService(BaseService):
             preferences = self.get_content_preferences(workspace_id)
 
         # Adjust each item
-        for item in content_items:
+        for item in items_as_dicts:
             original_score = item.get('score', 0)
             adjusted_score = original_score
             adjustments = []

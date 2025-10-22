@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from supabase import create_client, Client
 
-from backend.config import settings
+from backend.settings import settings
 from backend.middleware.auth import create_access_token
 from backend.database import get_supabase_service_client
 

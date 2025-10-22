@@ -177,6 +177,40 @@ export default function DashboardPage() {
           let wsConfig = null;
           try {
             wsConfig = await workspacesApi.getConfig(ws.id);
+
+            // Clean and validate sources
+            if (wsConfig.sources) {
+              const cleanedSources = wsConfig.sources.filter((source: any) => {
+                // Validate Reddit sources don't contain @ symbols
+                if (source.type === 'reddit' && source.config?.subreddits) {
+                  const hasInvalidSub = source.config.subreddits.some((sub: string) => {
+                    const cleaned = sub.replace(/^r\//, '');
+                    return cleaned.startsWith('@');
+                  });
+                  if (hasInvalidSub) {
+                    console.warn(`Removing invalid Reddit source with @ symbol:`, source);
+                    return false;
+                  }
+                }
+
+                // Validate Twitter sources don't contain r/ prefix
+                if ((source.type === 'x' || source.type === 'twitter') && source.config?.usernames) {
+                  const hasInvalidUser = source.config.usernames.some((user: string) => {
+                    const cleaned = user.replace(/^@/, '');
+                    return cleaned.startsWith('r/');
+                  });
+                  if (hasInvalidUser) {
+                    console.warn(`Removing invalid Twitter source with r/ prefix:`, source);
+                    return false;
+                  }
+                }
+
+                return true;
+              });
+
+              wsConfig.sources = cleanedSources;
+            }
+
             setConfig(wsConfig);
             setHasSources(wsConfig.sources?.some(s => s.enabled) || false);
           } catch (error) {
@@ -465,13 +499,17 @@ export default function DashboardPage() {
     if (!latestNewsletter || !latestNewsletter.items) return;
 
     try {
+      // Update the actual content item in database
+      await contentApi.updateItem(item.id, {
+        title: item.title,
+        summary: item.summary,
+        url: item.url,
+      });
+
+      // Update local state to reflect changes immediately
       const updatedItems = latestNewsletter.items.map(i =>
         i.id === item.id ? item : i
       );
-
-      await newslettersApi.update(latestNewsletter.id, {
-        items: updatedItems,
-      });
 
       setLatestNewsletter({
         ...latestNewsletter,
@@ -490,16 +528,18 @@ export default function DashboardPage() {
     if (!latestNewsletter) return;
 
     try {
-      await newslettersApi.update(latestNewsletter.id, {
-        subject_line: data.subject,
-        items: data.items,
-      });
+      // Only update subject line if it has changed (items are updated via handleEditArticle)
+      if (data.subject !== latestNewsletter.subject_line) {
+        await newslettersApi.update(latestNewsletter.id, {
+          subject_line: data.subject,
+        });
 
-      setLatestNewsletter({
-        ...latestNewsletter,
-        subject_line: data.subject,
-        items: data.items,
-      });
+        setLatestNewsletter({
+          ...latestNewsletter,
+          subject_line: data.subject,
+        });
+      }
+      // If subject hasn't changed, this is a no-op (silent success)
     } catch (error: any) {
       throw new Error(error.message || 'Failed to save draft');
     }
@@ -521,7 +561,7 @@ export default function DashboardPage() {
         },
       };
 
-      // Convert parsed sources to config format
+      // Convert parsed sources to config format (matching Settings page structure)
       const newSources = sources.map((source) => {
         if (source.type === 'reddit') {
           return {
@@ -529,8 +569,6 @@ export default function DashboardPage() {
             enabled: true,
             config: {
               subreddits: [source.value.replace(/^r\//, '')],
-              time_filter: 'week',
-              post_limit: 10,
             },
           };
         } else if (source.type === 'rss') {
@@ -542,16 +580,12 @@ export default function DashboardPage() {
             },
           };
         } else if (source.type === 'twitter') {
-          const isHashtag = source.value.startsWith('#');
+          // Use 'x' type to match Settings page
           return {
-            type: 'twitter',
+            type: 'x',
             enabled: true,
             config: {
-              ...(isHashtag
-                ? { hashtags: [source.value.replace(/^#/, '')] }
-                : { accounts: [source.value.replace(/^@/, '')] }
-              ),
-              tweet_limit: 10,
+              usernames: [source.value.replace(/^@/, '')],
             },
           };
         } else if (source.type === 'youtube') {
@@ -559,8 +593,7 @@ export default function DashboardPage() {
             type: 'youtube',
             enabled: true,
             config: {
-              channel_ids: [source.value],
-              video_limit: 10,
+              channels: [source.value],
             },
           };
         } else if (source.type === 'blog') {
@@ -569,7 +602,6 @@ export default function DashboardPage() {
             enabled: true,
             config: {
               urls: [source.value],
-              article_limit: 10,
             },
           };
         }
@@ -715,13 +747,29 @@ export default function DashboardPage() {
           {/* Quick Source Manager - Show when sources exist */}
           {hasSources && (
             <QuickSourceManager
-              sources={config?.sources ? config.sources.map((s, idx) => ({
-                id: `${s.type}-${idx}`,
-                type: s.type,
-                name: s.config.name || s.type.toUpperCase(),
-                itemCount: contentStats?.items_by_source?.[s.type] || 0,
-                isPaused: !s.enabled,
-              })) : []}
+              sources={config?.sources ? config.sources.map((s, idx) => {
+                // Get source name based on type
+                let name = s.type.toUpperCase();
+                if (s.type === 'reddit' && s.config.subreddits?.length) {
+                  name = `r/${s.config.subreddits[0]}`;
+                } else if (s.type === 'rss' && s.config.feeds?.length) {
+                  name = s.config.feeds[0].name || s.config.feeds[0].url;
+                } else if ((s.type === 'x' || s.type === 'twitter') && s.config.usernames?.length) {
+                  name = `@${s.config.usernames[0]}`;
+                } else if (s.type === 'youtube' && s.config.channels?.length) {
+                  name = s.config.channels[0];
+                } else if (s.type === 'blog' && s.config.urls?.length) {
+                  name = s.config.urls[0];
+                }
+
+                return {
+                  id: `${s.type}-${idx}`,
+                  type: s.type === 'x' ? 'twitter' : s.type, // Map 'x' back to 'twitter' for display
+                  name,
+                  itemCount: contentStats?.items_by_source?.[s.type] || 0,
+                  isPaused: !s.enabled,
+                };
+              }) : []}
               onPause={handlePauseSource}
               onResume={handleResumeSource}
               onAdd={handleAddSource}
@@ -763,6 +811,7 @@ export default function DashboardPage() {
             subject={latestNewsletter.subject_line}
             items={(latestNewsletter.items || []).map(transformNewsletterItemToFrontend)}
             onSave={handleSaveDraft}
+            onEditArticle={handleEditArticle}
             onSendNow={() => {
               setShowDraftEditor(false);
               setShowSendConfirmation(true);

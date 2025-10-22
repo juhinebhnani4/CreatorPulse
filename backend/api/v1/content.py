@@ -190,3 +190,46 @@ async def list_content_by_source(
         limit=limit,
         user_id=user_id
     )
+
+
+@router.put("/{item_id}", response_model=APIResponse)
+async def update_content_item(
+    item_id: str,
+    updates: dict,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Update a content item's editable fields.
+
+    Allows updating title, summary, and source_url fields.
+    Other fields are read-only.
+
+    Requires: Authorization header with Bearer token
+
+    Args:
+        item_id: Content item ID
+        updates: Dict with fields to update (title, summary, source_url)
+        user_id: User ID from JWT token
+
+    Returns:
+        APIResponse with updated content item
+    """
+    try:
+        updated_item = content_service.update_content_item(
+            user_id=user_id,
+            item_id=item_id,
+            updates=updates
+        )
+
+        return APIResponse.success_response(updated_item)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )

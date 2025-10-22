@@ -241,13 +241,20 @@ class SupabaseManager:
         """
         Save scraped content items to database.
 
+        Uses upsert to handle duplicates:
+        - Inserts new items
+        - Updates scraped_at timestamp for existing items
+
         Args:
             workspace_id: Workspace ID
             items: List of ContentItem objects
 
         Returns:
-            List of saved content data
+            List of saved/updated content data
         """
+        if not items:
+            return []
+
         data = [
             {
                 'workspace_id': workspace_id,
@@ -274,10 +281,47 @@ class SupabaseManager:
             for item in items
         ]
 
-        # Batch insert (use service_client to bypass RLS)
-        result = self.service_client.table('content_items').insert(data).execute()
+        # Batch upsert (use service_client to bypass RLS)
+        # on_conflict parameter ensures we update if duplicate exists
+        # This works with the unique constraint: (workspace_id, source, source_url)
+        try:
+            result = self.service_client.table('content_items') \
+                .upsert(
+                    data,
+                    on_conflict='workspace_id,source,source_url',
+                    ignore_duplicates=False  # Update existing records including scraped_at
+                ) \
+                .execute()
 
-        return result.data
+            print(f"✅ Saved/updated {len(result.data)} content items (workspace: {workspace_id})")
+            return result.data
+
+        except Exception as e:
+            # Log the error for debugging but don't swallow it
+            print(f"❌ Error saving content items: {e}")
+            print(f"   Attempted to save {len(items)} items to workspace {workspace_id}")
+            if items:
+                print(f"   First item URL: {items[0].source_url}")
+
+            # Check if this is a constraint issue (shouldn't happen with upsert)
+            error_str = str(e).lower()
+            if 'unique' in error_str or 'constraint' in error_str:
+                print(f"   ⚠️ Constraint conflict detected - this shouldn't happen with upsert")
+                print(f"   Falling back to manual duplicate handling...")
+
+                # Fallback: Try inserting only new items
+                try:
+                    result = self.service_client.table('content_items').insert(data).execute()
+                    print(f"✅ Fallback insert succeeded: {len(result.data)} items")
+                    return result.data
+                except Exception as fallback_error:
+                    print(f"❌ Fallback also failed: {fallback_error}")
+                    # Return empty as last resort, but log the issue
+                    print(f"⚠️ WARNING: All content insertion methods failed!")
+                    return []
+
+            # Re-raise other errors
+            raise
 
     def load_content_items(self,
                           workspace_id: str,
@@ -286,6 +330,9 @@ class SupabaseManager:
                           limit: int = 1000) -> List[ContentItem]:
         """
         Load content items from database.
+
+        Queries by scraped_at (not created_at) to get recently-fetched content.
+        This ensures fresh content even when same URLs are re-scraped.
 
         Args:
             workspace_id: Workspace ID
@@ -301,8 +348,8 @@ class SupabaseManager:
         query = self.service_client.table('content_items') \
             .select('*') \
             .eq('workspace_id', workspace_id) \
-            .gte('created_at', cutoff_date.isoformat()) \
-            .order('created_at', desc=True) \
+            .gte('scraped_at', cutoff_date.isoformat()) \
+            .order('scraped_at', desc=True) \
             .limit(limit)
 
         if source:
@@ -310,9 +357,18 @@ class SupabaseManager:
 
         result = query.execute()
 
+        print(f"📊 Loaded {len(result.data)} content items for workspace {workspace_id}")
+        print(f"   Query: scraped_at >= {cutoff_date.isoformat()[:19]}")
+
         # Convert to ContentItem objects
-        return [
-            ContentItem(
+        # Store database ID in metadata so it can be referenced later
+        content_items = []
+        for item in result.data:
+            # Get metadata and add database ID
+            metadata = item.get('metadata', {})
+            metadata['id'] = item['id']  # Store database ID in metadata
+
+            content_items.append(ContentItem(
                 title=item['title'],
                 source=item['source'],
                 source_url=item['source_url'],
@@ -330,11 +386,109 @@ class SupabaseManager:
                 external_url=item.get('external_url'),
                 tags=item.get('tags', []),
                 category=item.get('category'),
-                metadata=item.get('metadata', {}),
+                metadata=metadata,
                 scraped_at=datetime.fromisoformat(item['scraped_at'])
-            )
-            for item in result.data
-        ]
+            ))
+
+        return content_items
+
+    def get_content_item(self, content_item_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a single content item by ID.
+
+        Args:
+            content_item_id: Content item ID
+
+        Returns:
+            Content item as dict or None if not found
+        """
+        try:
+            print(f"\n[get_content_item] Looking up item: {content_item_id}")
+            print(f"[get_content_item] Using table: content_items")
+            print(f"[get_content_item] Query: SELECT * WHERE id = '{content_item_id}'")
+
+            result = self.service_client.table('content_items') \
+                .select('*') \
+                .eq('id', content_item_id) \
+                .maybe_single() \
+                .execute()
+
+            print(f"[get_content_item] Result type: {type(result)}")
+            print(f"[get_content_item] Result is None: {result is None}")
+
+            # Handle cases where result might be None or have no data attribute
+            if result is None:
+                print(f"[get_content_item] ❌ Result object is None - item not found")
+                return None
+
+            print(f"[get_content_item] Result.data type: {type(result.data)}")
+            print(f"[get_content_item] Result.data value: {result.data}")
+
+            item = result.data if result.data else None
+
+            if item is None:
+                print(f"[get_content_item] ❌ No data in result - item {content_item_id} not found in database")
+                return None
+
+            print(f"[get_content_item] ✅ Found item: {item.get('id')}")
+            print(f"[get_content_item]    - Title: {item.get('title', '')[:50]}...")
+            print(f"[get_content_item]    - Source: {item.get('source')}")
+            print(f"[get_content_item]    - Workspace: {item.get('workspace_id')}")
+
+            # Add source_type field for frontend compatibility (database only has 'source')
+            if item and 'source' in item and 'source_type' not in item:
+                item['source_type'] = item['source']
+
+            return item
+        except Exception as e:
+            print(f"[get_content_item] ⚠️ EXCEPTION getting content item {content_item_id}: {e}")
+            print(f"[get_content_item]    Exception type: {type(e).__name__}")
+            print(f"[get_content_item]    Exception details: {str(e)}")
+            import traceback
+            print(f"[get_content_item]    Traceback:\n{traceback.format_exc()}")
+            return None
+
+    def update_content_item(
+        self,
+        item_id: str,
+        updates: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update a content item's editable fields.
+
+        Args:
+            item_id: Content item ID
+            updates: Fields to update (only title, summary, source_url allowed)
+
+        Returns:
+            Updated content item as dict or None if not found
+        """
+        try:
+            # Only allow updating specific fields for safety
+            allowed_fields = ['title', 'summary', 'source_url']
+            filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+
+            if not filtered_updates:
+                raise ValueError("No valid fields to update")
+
+            result = self.service_client.table('content_items') \
+                .update(filtered_updates) \
+                .eq('id', item_id) \
+                .execute()
+
+            if not result.data or len(result.data) == 0:
+                return None
+
+            item = result.data[0]
+
+            # Add source_type field for frontend compatibility
+            if item and 'source' in item and 'source_type' not in item:
+                item['source_type'] = item['source']
+
+            return item
+        except Exception as e:
+            print(f"Error updating content item {item_id}: {e}")
+            return None
 
     def search_content_items(self,
                             workspace_id: str,
@@ -388,13 +542,22 @@ class SupabaseManager:
         Returns:
             Style profile data or None
         """
-        result = self.service_client.table('style_profiles') \
-            .select('*') \
-            .eq('workspace_id', workspace_id) \
-            .maybe_single() \
-            .execute()
+        try:
+            result = self.service_client.table('style_profiles') \
+                .select('*') \
+                .eq('workspace_id', workspace_id) \
+                .maybe_single() \
+                .execute()
 
-        return result.data if result.data else None
+            # Handle cases where result might be None or have no data attribute
+            if result is None:
+                return None
+
+            return result.data if result.data else None
+        except Exception as e:
+            # Log the error but don't crash - profile is optional
+            print(f"Error getting style profile for workspace {workspace_id}: {e}")
+            return None
 
     def update_style_profile(self,
                             workspace_id: str,
@@ -612,7 +775,7 @@ class SupabaseManager:
         Returns:
             List of newsletter data
         """
-        query = self.client.table('newsletters') \
+        query = self.service_client.table('newsletters') \
             .select('*') \
             .eq('workspace_id', workspace_id) \
             .order('generated_at', desc=True) \
@@ -1546,13 +1709,21 @@ class SupabaseManager:
         Returns:
             Content preferences or None
         """
-        result = self.service_client.table('content_preferences') \
-            .select('*') \
-            .eq('workspace_id', workspace_id) \
-            .single() \
-            .execute()
+        try:
+            result = self.service_client.table('content_preferences') \
+                .select('*') \
+                .eq('workspace_id', workspace_id) \
+                .maybe_single() \
+                .execute()
 
-        return result.data if result.data else None
+            if result is None:
+                return None
+
+            return result.data if result.data else None
+        except Exception as e:
+            # Log the error but don't crash - preferences are optional
+            print(f"Error getting content preferences for workspace {workspace_id}: {e}")
+            return None
 
     def recalculate_source_quality(
         self,

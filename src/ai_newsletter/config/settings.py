@@ -73,7 +73,7 @@ class YouTubeConfig(ScraperConfig):
 class NewsletterConfig:
     """Newsletter generation configuration."""
     openai_api_key: Optional[str] = None
-    model: str = "gpt-4-turbo-preview"
+    model: str = "gpt-4o-mini"  # Updated: gpt-4-turbo-preview deprecated, using gpt-4o-mini (fast & cost-effective)
     temperature: float = 0.7
     max_tokens: int = 2000
     template: str = "default"
@@ -211,7 +211,7 @@ class Settings:
         
         # Newsletter configuration from env
         settings.newsletter.openai_api_key = os.getenv('OPENAI_API_KEY')
-        settings.newsletter.model = os.getenv('NEWSLETTER_MODEL', 'gpt-4-turbo-preview')
+        settings.newsletter.model = os.getenv('NEWSLETTER_MODEL', 'gpt-4o-mini')  # Updated: using gpt-4o-mini (cost-effective)
         settings.newsletter.temperature = float(os.getenv('NEWSLETTER_TEMPERATURE', '0.7'))
         settings.newsletter.max_tokens = int(os.getenv('NEWSLETTER_MAX_TOKENS', '2000'))
 

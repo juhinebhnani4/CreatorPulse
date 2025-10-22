@@ -3,7 +3,7 @@ Database utilities - Supabase client initialization.
 """
 
 from supabase import create_client, Client
-from backend.config import settings
+from backend.settings import settings
 
 
 def get_supabase_client() -> Client:

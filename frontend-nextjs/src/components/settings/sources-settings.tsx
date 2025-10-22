@@ -6,87 +6,265 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/lib/hooks/use-toast';
-import { Plus, Trash2, Lightbulb, CheckCircle2, Loader2, X } from 'lucide-react';
+import { useWorkspace } from '@/lib/hooks/use-workspace';
+import { Plus, Trash2, Lightbulb, CheckCircle2, Loader2, X, Settings } from 'lucide-react';
 import { api } from '@/lib/api/client';
+import { ManageSourcesModal } from '@/components/modals/manage-sources-modal';
+
+interface UnifiedSource {
+  id: string;
+  type: 'reddit' | 'rss' | 'twitter' | 'youtube' | 'blog';
+  identifier: string;
+  enabled: boolean;
+  stats?: {
+    itemsCollected?: number;
+    lastScraped?: string;
+  };
+}
 
 export function SourcesSettings() {
   const { toast } = useToast();
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const { workspace } = useWorkspace();
   const [isLoading, setIsLoading] = useState(true);
   const [redditSubreddits, setRedditSubreddits] = useState<string[]>([]);
   const [rssFeeds, setRssFeeds] = useState<string[]>([]);
   const [twitterUsers, setTwitterUsers] = useState<string[]>([]);
   const [youtubeChannels, setYoutubeChannels] = useState<string[]>([]);
   const [blogUrls, setBlogUrls] = useState<string[]>([]);
+  const [disabledSources, setDisabledSources] = useState<UnifiedSource[]>([]); // Track disabled sources
   const [newValue, setNewValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
+  const [showManageModal, setShowManageModal] = useState(false);
 
   // Load workspace configuration on mount
   useEffect(() => {
     const loadConfig = async () => {
+      if (!workspace?.id) {
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
-
-        // Get the first workspace (or the current one from context/route params)
-        const workspaces = await api.workspaces.list();
-        if (workspaces.length === 0) {
-          toast({
-            title: 'No Workspace Found',
-            description: 'Please create a workspace first',
-            variant: 'destructive',
-          });
-          setIsLoading(false);
-          return;
-        }
-
-        const workspace = workspaces[0];
-        setWorkspaceId(workspace.id);
 
         // Load the workspace config
         const config = await api.workspaces.getConfig(workspace.id);
 
         // Parse sources from config
         if (config.sources) {
+          // Accumulate sources instead of replacing
+          const reddit: string[] = [];
+          const rss: string[] = [];
+          const twitter: string[] = [];
+          const youtube: string[] = [];
+          const blogs: string[] = [];
+          const disabled: UnifiedSource[] = [];
+
+          // Track seen sources to avoid duplicates
+          const seenSources = new Set<string>();
+          const getSourceKey = (type: string, identifier: string) => {
+            const normalized = identifier.toLowerCase().replace(/^r\//, '').replace(/^@/, '');
+            return `${type}-${normalized}`;
+          };
+
           config.sources.forEach((source: any) => {
-            if (!source.enabled) return;
+            // Handle disabled sources separately
+            if (!source.enabled) {
+              // Extract identifiers from disabled sources
+              switch (source.type) {
+                case 'reddit':
+                  if (source.config?.subreddits) {
+                    source.config.subreddits.forEach((sub: string) => {
+                      const cleaned = sub.replace(/^r\//, '');
+                      const key = getSourceKey('reddit', cleaned);
+                      if (!seenSources.has(key)) {
+                        seenSources.add(key);
+                        disabled.push({
+                          id: `reddit-${cleaned}`,
+                          type: 'reddit',
+                          identifier: `r/${cleaned}`,
+                          enabled: false,
+                        });
+                      }
+                    });
+                  }
+                  break;
+                case 'rss':
+                  if (source.config?.feeds) {
+                    source.config.feeds.forEach((f: any) => {
+                      const key = getSourceKey('rss', f.url);
+                      if (!seenSources.has(key)) {
+                        seenSources.add(key);
+                        disabled.push({
+                          id: `rss-${f.url}`,
+                          type: 'rss',
+                          identifier: f.url,
+                          enabled: false,
+                        });
+                      }
+                    });
+                  }
+                  break;
+                case 'twitter':
+                case 'x':
+                  if (source.config?.usernames) {
+                    source.config.usernames.forEach((user: string) => {
+                      const cleaned = user.replace(/^@/, '');
+                      const key = getSourceKey('twitter', cleaned);
+                      if (!seenSources.has(key)) {
+                        seenSources.add(key);
+                        disabled.push({
+                          id: `twitter-${cleaned}`,
+                          type: 'twitter',
+                          identifier: `@${cleaned}`,
+                          enabled: false,
+                        });
+                      }
+                    });
+                  }
+                  break;
+                case 'youtube':
+                  if (source.config?.channels) {
+                    source.config.channels.forEach((channel: string) => {
+                      const key = getSourceKey('youtube', channel);
+                      if (!seenSources.has(key)) {
+                        seenSources.add(key);
+                        disabled.push({
+                          id: `youtube-${channel}`,
+                          type: 'youtube',
+                          identifier: channel,
+                          enabled: false,
+                        });
+                      }
+                    });
+                  }
+                  break;
+                case 'blog':
+                  if (source.config?.urls) {
+                    source.config.urls.forEach((url: string) => {
+                      const key = getSourceKey('blog', url);
+                      if (!seenSources.has(key)) {
+                        seenSources.add(key);
+                        disabled.push({
+                          id: `blog-${url}`,
+                          type: 'blog',
+                          identifier: url,
+                          enabled: false,
+                        });
+                      }
+                    });
+                  }
+                  break;
+              }
+              return;
+            }
 
             switch (source.type) {
               case 'reddit':
                 if (source.config?.subreddits) {
-                  setRedditSubreddits(source.config.subreddits);
+                  // Validate: Reddit subreddits shouldn't contain @ symbols
+                  source.config.subreddits.forEach((sub: string) => {
+                    const cleaned = sub.replace(/^r\//, ''); // Remove r/ prefix if present
+                    if (cleaned.startsWith('@')) {
+                      console.warn(`Invalid Reddit subreddit detected: ${sub} (contains @, likely a Twitter username)`);
+                    } else {
+                      const key = getSourceKey('reddit', cleaned);
+                      if (!seenSources.has(key)) {
+                        seenSources.add(key);
+                        reddit.push(cleaned);
+                      }
+                    }
+                  });
                 }
                 break;
               case 'rss':
                 if (source.config?.feeds) {
-                  setRssFeeds(source.config.feeds.map((f: any) => f.url));
+                  source.config.feeds.forEach((f: any) => {
+                    const key = getSourceKey('rss', f.url);
+                    if (!seenSources.has(key)) {
+                      seenSources.add(key);
+                      rss.push(f.url);
+                    }
+                  });
                 }
                 break;
               case 'twitter':
               case 'x':
                 if (source.config?.usernames) {
-                  setTwitterUsers(source.config.usernames);
+                  // Validate: Twitter usernames shouldn't contain r/ prefix
+                  source.config.usernames.forEach((user: string) => {
+                    const cleaned = user.replace(/^@/, ''); // Remove @ prefix if present
+                    if (cleaned.startsWith('r/')) {
+                      console.warn(`Invalid Twitter username detected: ${user} (contains r/, likely a Reddit subreddit)`);
+                    } else {
+                      const key = getSourceKey('twitter', cleaned);
+                      if (!seenSources.has(key)) {
+                        seenSources.add(key);
+                        twitter.push(cleaned);
+                      }
+                    }
+                  });
                 }
                 break;
               case 'youtube':
                 if (source.config?.channels) {
-                  setYoutubeChannels(source.config.channels);
+                  source.config.channels.forEach((channel: string) => {
+                    const key = getSourceKey('youtube', channel);
+                    if (!seenSources.has(key)) {
+                      seenSources.add(key);
+                      youtube.push(channel);
+                    }
+                  });
                 }
                 break;
               case 'blog':
                 if (source.config?.urls) {
-                  setBlogUrls(source.config.urls);
+                  source.config.urls.forEach((url: string) => {
+                    const key = getSourceKey('blog', url);
+                    if (!seenSources.has(key)) {
+                      seenSources.add(key);
+                      blogs.push(url);
+                    }
+                  });
                 }
                 break;
             }
           });
+
+          // Set state once with accumulated values
+          setRedditSubreddits(reddit);
+          setRssFeeds(rss);
+          setTwitterUsers(twitter);
+          setYoutubeChannels(youtube);
+          setBlogUrls(blogs);
+          setDisabledSources(disabled);
         }
       } catch (error: any) {
         console.error('Failed to load config:', error);
+        console.error('Error details:', {
+          message: error.message,
+          status: error.status,
+          code: error.code,
+          name: error.name
+        });
+
+        // More specific error messaging
+        let errorDescription = 'Please try refreshing the page';
+        if (error.status === 401 || error.message?.includes('credentials')) {
+          errorDescription = 'Authentication failed. Please log in again.';
+        } else if (error.status === 404) {
+          errorDescription = 'Workspace configuration not found';
+        } else if (error.status === 0) {
+          errorDescription = 'Unable to connect to server. Please check if the backend is running.';
+        } else if (error.message) {
+          errorDescription = error.message;
+        }
+
         toast({
           title: 'Failed to Load Configuration',
-          description: error.message || 'Please try refreshing the page',
+          description: errorDescription,
           variant: 'destructive',
         });
       } finally {
@@ -95,10 +273,17 @@ export function SourcesSettings() {
     };
 
     loadConfig();
-  }, [toast]);
+  }, [workspace?.id]);
 
-  const handleSave = async () => {
-    if (!workspaceId) {
+  const handleSave = async (options?: {
+    customDisabledSources?: UnifiedSource[];
+    customReddit?: string[];
+    customRss?: string[];
+    customTwitter?: string[];
+    customYoutube?: string[];
+    customBlogs?: string[];
+  }) => {
+    if (!workspace?.id) {
       toast({
         title: 'Error',
         description: 'No workspace selected',
@@ -110,38 +295,94 @@ export function SourcesSettings() {
     setIsSaving(true);
 
     try {
+      // Use either passed sources or current state
+      const sourcesToDisable = options?.customDisabledSources ?? disabledSources;
+      const redditToSave = options?.customReddit ?? redditSubreddits;
+      const rssToSave = options?.customRss ?? rssFeeds;
+      const twitterToSave = options?.customTwitter ?? twitterUsers;
+      const youtubeToSave = options?.customYoutube ?? youtubeChannels;
+      const blogsToSave = options?.customBlogs ?? blogUrls;
+
+      // Group disabled sources by type
+      const disabledByType: Record<string, string[]> = {
+        reddit: [],
+        rss: [],
+        twitter: [],
+        youtube: [],
+        blog: [],
+      };
+
+      sourcesToDisable.forEach((source) => {
+        const identifier = source.identifier
+          .replace(/^r\//, '')  // Remove r/ prefix for reddit
+          .replace(/^@/, '');    // Remove @ prefix for twitter
+
+        if (source.type === 'twitter') {
+          disabledByType['twitter'].push(identifier);
+        } else {
+          disabledByType[source.type].push(identifier);
+        }
+      });
+
       // Build the config object matching backend schema
       const config = {
         sources: [
-          ...(redditSubreddits.length > 0 ? [{
+          // Enabled sources
+          ...(redditToSave.length > 0 ? [{
             type: 'reddit',
             enabled: true,
-            config: { subreddits: redditSubreddits }
+            config: { subreddits: redditToSave }
           }] : []),
-          ...(rssFeeds.length > 0 ? [{
+          ...(rssToSave.length > 0 ? [{
             type: 'rss',
             enabled: true,
-            config: { feeds: rssFeeds.map(url => ({ url, name: url })) }
+            config: { feeds: rssToSave.map(url => ({ url, name: url })) }
           }] : []),
-          ...(twitterUsers.length > 0 ? [{
+          ...(twitterToSave.length > 0 ? [{
             type: 'x',
             enabled: true,
-            config: { usernames: twitterUsers }
+            config: { usernames: twitterToSave }
           }] : []),
-          ...(youtubeChannels.length > 0 ? [{
+          ...(youtubeToSave.length > 0 ? [{
             type: 'youtube',
             enabled: true,
-            config: { channels: youtubeChannels }
+            config: { channels: youtubeToSave }
           }] : []),
-          ...(blogUrls.length > 0 ? [{
+          ...(blogsToSave.length > 0 ? [{
             type: 'blog',
             enabled: true,
-            config: { urls: blogUrls }
+            config: { urls: blogsToSave }
+          }] : []),
+          // Disabled sources
+          ...(disabledByType.reddit.length > 0 ? [{
+            type: 'reddit',
+            enabled: false,
+            config: { subreddits: disabledByType.reddit }
+          }] : []),
+          ...(disabledByType.rss.length > 0 ? [{
+            type: 'rss',
+            enabled: false,
+            config: { feeds: disabledByType.rss.map(url => ({ url, name: url })) }
+          }] : []),
+          ...(disabledByType.twitter.length > 0 ? [{
+            type: 'x',
+            enabled: false,
+            config: { usernames: disabledByType.twitter }
+          }] : []),
+          ...(disabledByType.youtube.length > 0 ? [{
+            type: 'youtube',
+            enabled: false,
+            config: { channels: disabledByType.youtube }
+          }] : []),
+          ...(disabledByType.blog.length > 0 ? [{
+            type: 'blog',
+            enabled: false,
+            config: { urls: disabledByType.blog }
           }] : []),
         ]
       };
 
-      await api.workspaces.saveConfig(workspaceId, config);
+      await api.workspaces.saveConfig(workspace.id, config);
 
       toast({
         title: '✓ Settings Saved',
@@ -163,9 +404,23 @@ export function SourcesSettings() {
   const addRedditSubreddit = async () => {
     if (newValue.trim()) {
       setIsAdding(true);
+      // Sanitize: remove r/ prefix and @ symbol
+      let cleaned = newValue.trim().replace(/^r\//, '').replace(/^@/, '');
+
+      // Validate: warn if it looks like a Twitter username
+      if (newValue.trim().startsWith('@')) {
+        toast({
+          title: 'Invalid Subreddit',
+          description: 'This looks like a Twitter username. Please add it in the Twitter tab instead.',
+          variant: 'destructive',
+        });
+        setIsAdding(false);
+        return;
+      }
+
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 500));
-      setRedditSubreddits([...redditSubreddits, newValue.trim()]);
+      setRedditSubreddits([...redditSubreddits, cleaned]);
       setNewValue('');
       setIsAdding(false);
       setJustAdded(true);
@@ -173,7 +428,7 @@ export function SourcesSettings() {
 
       toast({
         title: '✓ Subreddit Added',
-        description: `r/${newValue.trim()} has been added to your sources`,
+        description: `r/${cleaned} has been added to your sources`,
       });
     }
   };
@@ -214,8 +469,20 @@ export function SourcesSettings() {
   const addTwitterUser = async () => {
     if (newValue.trim()) {
       setIsAdding(true);
+
+      // Validate: warn if it looks like a Reddit subreddit
+      if (newValue.trim().startsWith('r/') || newValue.trim().startsWith('/r/')) {
+        toast({
+          title: 'Invalid Twitter Username',
+          description: 'This looks like a Reddit subreddit. Please add it in the Reddit tab instead.',
+          variant: 'destructive',
+        });
+        setIsAdding(false);
+        return;
+      }
+
       await new Promise(resolve => setTimeout(resolve, 500));
-      const username = newValue.trim().replace('@', ''); // Remove @ if user adds it
+      const username = newValue.trim().replace(/^@/, ''); // Remove @ if user adds it
       setTwitterUsers([...twitterUsers, username]);
       setNewValue('');
       setIsAdding(false);
@@ -290,6 +557,137 @@ export function SourcesSettings() {
   const popularSubreddits = ['datascience', 'technology', 'programming', 'startups'];
   const popularTwitterUsers = ['elonmusk', 'sama', 'karpathy', 'ylecun'];
 
+  // Convert separate source arrays to unified format for ManageSourcesModal
+  const convertToUnifiedSources = (): UnifiedSource[] => {
+    // Use a Map to deduplicate sources by their unique key
+    const sourceMap = new Map<string, UnifiedSource>();
+
+    // Helper to create a unique key for each source
+    const getSourceKey = (type: string, identifier: string): string => {
+      // Normalize identifier to handle variations like r/sub vs sub, @user vs user
+      const normalized = identifier
+        .replace(/^r\//, '')
+        .replace(/^@/, '')
+        .toLowerCase();
+      return `${type}-${normalized}`;
+    };
+
+    // Add enabled sources
+    redditSubreddits.forEach((sub) => {
+      const key = getSourceKey('reddit', sub);
+      sourceMap.set(key, {
+        id: `reddit-${sub}`,
+        type: 'reddit',
+        identifier: `r/${sub}`,
+        enabled: true,
+      });
+    });
+
+    rssFeeds.forEach((feed) => {
+      const key = getSourceKey('rss', feed);
+      sourceMap.set(key, {
+        id: `rss-${feed}`,
+        type: 'rss',
+        identifier: feed,
+        enabled: true,
+      });
+    });
+
+    twitterUsers.forEach((user) => {
+      const key = getSourceKey('twitter', user);
+      sourceMap.set(key, {
+        id: `twitter-${user}`,
+        type: 'twitter',
+        identifier: `@${user}`,
+        enabled: true,
+      });
+    });
+
+    youtubeChannels.forEach((channel) => {
+      const key = getSourceKey('youtube', channel);
+      sourceMap.set(key, {
+        id: `youtube-${channel}`,
+        type: 'youtube',
+        identifier: channel,
+        enabled: true,
+      });
+    });
+
+    blogUrls.forEach((url) => {
+      const key = getSourceKey('blog', url);
+      sourceMap.set(key, {
+        id: `blog-${url}`,
+        type: 'blog',
+        identifier: url,
+        enabled: true,
+      });
+    });
+
+    // Add disabled sources (will overwrite enabled if duplicate)
+    disabledSources.forEach((source) => {
+      const key = getSourceKey(source.type, source.identifier);
+      // Only add if not already present as enabled, or overwrite with disabled
+      // This gives precedence to disabled state
+      sourceMap.set(key, source);
+    });
+
+    return Array.from(sourceMap.values());
+  };
+
+  // Update sources from unified format back to separate arrays
+  const handleUpdateUnifiedSources = async (updatedSources: UnifiedSource[]) => {
+    const newReddit: string[] = [];
+    const newRss: string[] = [];
+    const newTwitter: string[] = [];
+    const newYoutube: string[] = [];
+    const newBlogs: string[] = [];
+    const newDisabled: UnifiedSource[] = [];
+
+    updatedSources.forEach((source) => {
+      if (!source.enabled) {
+        // Preserve disabled sources
+        newDisabled.push(source);
+        return;
+      }
+
+      switch (source.type) {
+        case 'reddit':
+          newReddit.push(source.identifier.replace('r/', ''));
+          break;
+        case 'rss':
+          newRss.push(source.identifier);
+          break;
+        case 'twitter':
+          newTwitter.push(source.identifier.replace('@', ''));
+          break;
+        case 'youtube':
+          newYoutube.push(source.identifier);
+          break;
+        case 'blog':
+          newBlogs.push(source.identifier);
+          break;
+      }
+    });
+
+    // Update state
+    setRedditSubreddits(newReddit);
+    setRssFeeds(newRss);
+    setTwitterUsers(newTwitter);
+    setYoutubeChannels(newYoutube);
+    setBlogUrls(newBlogs);
+    setDisabledSources(newDisabled);
+
+    // Save to backend - pass all new arrays since state hasn't updated yet
+    await handleSave({
+      customDisabledSources: newDisabled,
+      customReddit: newReddit,
+      customRss: newRss,
+      customTwitter: newTwitter,
+      customYoutube: newYoutube,
+      customBlogs: newBlogs,
+    });
+  };
+
   // Show loading state while fetching config
   if (isLoading) {
     return (
@@ -304,7 +702,7 @@ export function SourcesSettings() {
 
   return (
     <div className="space-y-6">
-      {/* Header with count */}
+      {/* Header with count and Manage button */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-semibold text-foreground">Content Sources</h3>
@@ -312,6 +710,14 @@ export function SourcesSettings() {
             {redditSubreddits.length + rssFeeds.length + twitterUsers.length + youtubeChannels.length + blogUrls.length} active sources configured
           </p>
         </div>
+        <Button
+          onClick={() => setShowManageModal(true)}
+          variant="outline"
+          size="sm"
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          Manage All Sources
+        </Button>
       </div>
 
       <Tabs defaultValue="reddit" className="w-full">
@@ -722,6 +1128,14 @@ export function SourcesSettings() {
           )}
         </Button>
       </div>
+
+      {/* Manage Sources Modal */}
+      <ManageSourcesModal
+        open={showManageModal}
+        onClose={() => setShowManageModal(false)}
+        sources={convertToUnifiedSources()}
+        onUpdate={handleUpdateUnifiedSources}
+      />
     </div>
   );
 }

@@ -56,7 +56,7 @@ export function ScheduleSettings() {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
       const response = await fetch(`http://localhost:8000/api/v1/scheduler/workspaces/${workspace.id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -93,7 +93,7 @@ export function ScheduleSettings() {
 
     setSaving(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
       const response = await fetch('http://localhost:8000/api/v1/scheduler', {
         method: 'POST',
         headers: {
@@ -138,7 +138,7 @@ export function ScheduleSettings() {
 
   const handleToggleJob = async (jobId: string, currentlyEnabled: boolean) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
       const endpoint = currentlyEnabled
         ? `http://localhost:8000/api/v1/scheduler/${jobId}/pause`
         : `http://localhost:8000/api/v1/scheduler/${jobId}/resume`;
@@ -173,7 +173,7 @@ export function ScheduleSettings() {
     if (!confirm('Are you sure you want to delete this schedule?')) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
       const response = await fetch(`http://localhost:8000/api/v1/scheduler/${jobId}`, {
         method: 'DELETE',
         headers: {
@@ -308,6 +308,7 @@ export function ScheduleSettings() {
                 <SelectItem value="America/Los_Angeles">Pacific Time (PT)</SelectItem>
                 <SelectItem value="Europe/London">London (GMT)</SelectItem>
                 <SelectItem value="Europe/Paris">Paris (CET)</SelectItem>
+                <SelectItem value="Asia/Kolkata">India (IST)</SelectItem>
                 <SelectItem value="Asia/Tokyo">Tokyo (JST)</SelectItem>
                 <SelectItem value="UTC">UTC</SelectItem>
               </SelectContent>

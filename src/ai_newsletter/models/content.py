@@ -53,12 +53,14 @@ class ContentItem:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert ContentItem to dictionary."""
+        created_at_iso = self.created_at.isoformat() if self.created_at else None
         return {
             'title': self.title,
             'source': self.source,
             'source_type': self.source,  # Added for frontend compatibility (same as source)
             'source_url': self.source_url,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_at': created_at_iso,
+            'published_at': created_at_iso,  # Frontend expects this field
             'content': self.content,
             'summary': self.summary,
             'author': self.author,
@@ -79,12 +81,25 @@ class ContentItem:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ContentItem':
         """Create ContentItem from dictionary."""
+        # Create a copy to avoid modifying original
+        data = data.copy()
+
+        # Remove frontend-specific fields that aren't in the dataclass
+        data.pop('source_type', None)  # Added by to_dict() for frontend
+        data.pop('url', None)  # Added by backend for frontend
+        data.pop('published_at', None)  # Alias for created_at
+        data.pop('adjusted_score', None)  # Added by feedback service
+        data.pop('original_score', None)  # Added by feedback/trend boosting
+        data.pop('adjustments', None)  # Added by feedback service
+        data.pop('trend_boosted', None)  # Added by trend boosting
+        data.pop('id', None)  # Database ID, not part of ContentItem dataclass
+
         # Convert ISO strings back to datetime objects
         if isinstance(data.get('created_at'), str):
             data['created_at'] = datetime.fromisoformat(data['created_at'])
         if isinstance(data.get('scraped_at'), str):
             data['scraped_at'] = datetime.fromisoformat(data['scraped_at'])
-        
+
         return cls(**data)
     
     def __repr__(self) -> str:
