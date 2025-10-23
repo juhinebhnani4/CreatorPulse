@@ -226,6 +226,13 @@ class NewsletterService:
                 'content': item.content
             })
 
+        # Pass image URLs to Claude generator
+        # Extract image URLs from content items
+        for idx, item in enumerate(items_for_claude):
+            # Match with original content_items_dicts to get image_url
+            if idx < len(content_items_dicts):
+                item['image_url'] = content_items_dicts[idx].get('image_url')
+
         # Generate newsletter content using Claude
         print(f"[NewsletterService] [INFO] Calling Claude API with {len(items_for_claude)} items")
         claude_result = claude_generator.generate_newsletter_content(
@@ -234,33 +241,9 @@ class NewsletterService:
             tone=tone
         )
 
-        # Extract HTML content from Claude result
-        # Claude returns: {"title": "...", "intro": "...", "content": "...", "footer": "..."}
-        html_content = f"""
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
-                h1 {{ color: #333; border-bottom: 2px solid #4A90E2; padding-bottom: 10px; }}
-                h2 {{ color: #4A90E2; margin-top: 30px; }}
-                p {{ margin: 15px 0; }}
-                a {{ color: #4A90E2; text-decoration: none; }}
-                a:hover {{ text-decoration: underline; }}
-                .intro {{ font-size: 1.1em; color: #555; font-style: italic; margin: 20px 0; }}
-                .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; color: #777; font-size: 0.9em; }}
-            </style>
-        </head>
-        <body>
-            <h1>{claude_result.get('title', title)}</h1>
-            <div class="intro">{claude_result.get('intro', '')}</div>
-            <div class="content">
-                {claude_result.get('content', '')}
-            </div>
-            <div class="footer">{claude_result.get('footer', '')}</div>
-        </body>
-        </html>
-        """
+        # Claude now returns COMPLETE HTML with images and styling
+        # Use it directly without wrapping in another template
+        html_content = claude_result.get('content', '')
 
         # Debug: Check HTML content
         print(f"[DEBUG] Newsletter generation completed")
