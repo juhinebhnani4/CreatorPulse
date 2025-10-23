@@ -369,13 +369,13 @@ async def update_newsletter(
                 detail="No fields to update"
             )
 
-        # Update via service
+        # Update via service (use updates dict for mapped values)
         newsletter = await newsletter_service.update_newsletter_status(
             user_id=user_id,
             newsletter_id=newsletter_id,
-            status=request.status if request.status else None,
+            status=updates.get('status'),
             sent_at=request.sent_at,
-            title=request.title if request.title else None
+            title=updates.get('title')
         )
 
         return APIResponse.success_response(newsletter)

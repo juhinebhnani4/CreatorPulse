@@ -396,14 +396,15 @@ class NewsletterService:
             print(f"[_populate_newsletter_items] No content items found, returning empty items")
             return newsletter
 
-        # Fetch content items from database
-        items = []
-        for item_id in content_item_ids:
-            item = self.supabase.get_content_item(item_id)
-            if item:
-                items.append(item)
-            else:
-                print(f"[_populate_newsletter_items] WARNING: Could not find content item {item_id}")
+        # Fetch content items from database in bulk (single query instead of N queries)
+        items = self.supabase.get_content_items_bulk(content_item_ids)
+
+        # Log any missing items (items not found in database)
+        if len(items) < len(content_item_ids):
+            found_ids = {item['id'] for item in items}
+            missing_ids = set(content_item_ids) - found_ids
+            for missing_id in missing_ids:
+                print(f"[_populate_newsletter_items] WARNING: Could not find content item {missing_id}")
 
         # Add items field to newsletter
         newsletter['items'] = items
@@ -614,12 +615,13 @@ class NewsletterService:
         newsletter = await self.get_newsletter(user_id, newsletter_id)
 
         # Update
+        # Use 'is not None' to allow empty strings and distinguish None from empty
         updates = {}
-        if status:
+        if status is not None:
             updates['status'] = status
-        if sent_at:
+        if sent_at is not None:
             updates['sent_at'] = sent_at.isoformat()
-        if title:
+        if title is not None:
             updates['title'] = title
 
         if not updates:

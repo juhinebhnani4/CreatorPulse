@@ -448,6 +448,49 @@ class SupabaseManager:
             print(f"[get_content_item]    Traceback:\n{traceback.format_exc()}")
             return None
 
+    def get_content_items_bulk(self, content_item_ids: List[str]) -> List[Dict[str, Any]]:
+        """
+        Get multiple content items by IDs in a single query.
+        This is much more efficient than calling get_content_item() in a loop.
+
+        Args:
+            content_item_ids: List of content item IDs
+
+        Returns:
+            List of content items as dicts (may be less than requested if some IDs don't exist)
+        """
+        if not content_item_ids:
+            return []
+
+        try:
+            print(f"\n[get_content_items_bulk] Fetching {len(content_item_ids)} items in bulk")
+            print(f"[get_content_items_bulk] IDs: {content_item_ids[:3]}..." if len(content_item_ids) > 3 else f"[get_content_items_bulk] IDs: {content_item_ids}")
+
+            result = self.service_client.table('content_items') \
+                .select('*') \
+                .in_('id', content_item_ids) \
+                .execute()
+
+            if result and result.data:
+                items = result.data
+                print(f"[get_content_items_bulk] [OK] Found {len(items)} items out of {len(content_item_ids)} requested")
+
+                # Add source_type field for frontend compatibility (database only has 'source')
+                for item in items:
+                    if 'source' in item and 'source_type' not in item:
+                        item['source_type'] = item['source']
+
+                return items
+            else:
+                print(f"[get_content_items_bulk] [WARNING] No items found")
+                return []
+
+        except Exception as e:
+            print(f"[get_content_items_bulk] ERROR: {e}")
+            import traceback
+            print(f"[get_content_items_bulk] Traceback:\n{traceback.format_exc()}")
+            return []
+
     def update_content_item(
         self,
         item_id: str,
