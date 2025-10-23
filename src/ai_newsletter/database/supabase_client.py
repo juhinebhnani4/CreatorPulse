@@ -759,6 +759,7 @@ class SupabaseManager:
                        title: str,
                        html_content: str,
                        plain_text_content: Optional[str] = None,
+                       subject_line: Optional[str] = None,
                        content_item_ids: List[str] = None,
                        model_used: str = "gpt-4",
                        temperature: float = 0.7,
@@ -786,6 +787,7 @@ class SupabaseManager:
         data = {
             'workspace_id': workspace_id,
             'title': title,
+            'subject_line': subject_line or title,  # Use subject_line if provided, fallback to title
             'content_html': html_content,  # Map to new field name
             'content_text': plain_text_content,  # Map to new field name
             'content_item_ids': content_item_ids or [],

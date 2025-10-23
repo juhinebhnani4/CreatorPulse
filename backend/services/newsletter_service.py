@@ -265,10 +265,21 @@ class NewsletterService:
 
         print(f"[DEBUG] Extracted {len(content_item_ids)} content item IDs: {content_item_ids[:3] if content_item_ids else 'NONE'}")
 
+        # Extract subject line from h1 tag in HTML (for email subject)
+        import re
+        subject_line_match = re.search(r'<h1[^>]*>(.*?)</h1>', html_content, re.DOTALL | re.IGNORECASE)
+        if subject_line_match:
+            subject_line = subject_line_match.group(1).strip()
+            # Remove any HTML tags within the h1
+            subject_line = re.sub(r'<[^>]+>', '', subject_line)
+        else:
+            subject_line = title  # Fallback to title if no h1 found
+
         # Save to database
         newsletter = self.supabase.save_newsletter(
             workspace_id=workspace_id,
             title=title,
+            subject_line=subject_line,  # Add subject line for email
             html_content=html_content,
             plain_text_content=None,  # TODO: Generate plain text version
             content_item_ids=content_item_ids,
@@ -343,10 +354,21 @@ class NewsletterService:
             if item_id:
                 content_item_ids.append(item_id)
 
+        # Extract subject line from h1 tag in HTML (for email subject)
+        import re
+        subject_line_match = re.search(r'<h1[^>]*>(.*?)</h1>', html_content, re.DOTALL | re.IGNORECASE)
+        if subject_line_match:
+            subject_line = subject_line_match.group(1).strip()
+            # Remove any HTML tags within the h1
+            subject_line = re.sub(r'<[^>]+>', '', subject_line)
+        else:
+            subject_line = title  # Fallback to title if no h1 found
+
         # Save to database
         newsletter = self.supabase.save_newsletter(
             workspace_id=workspace_id,
             title=title,
+            subject_line=subject_line,  # Add subject line for email
             html_content=html_content,
             plain_text_content=plain_text_content,
             content_item_ids=content_item_ids,

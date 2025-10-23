@@ -128,11 +128,15 @@ export function DraftEditorModal({
   }, [open, draftId]);
 
   // Initialize clean HTML state when newsletter HTML loads
+  // IMPORTANT: cleanHtml must match what's actually displayed (including prepended h1)
   useEffect(() => {
     if (newsletterHtml) {
-      setCleanHtml(newsletterHtml);
+      const htmlToStore = hasTitle
+        ? newsletterHtml
+        : `<h1 style="color: #111827; font-size: 32px; font-weight: 800; margin-bottom: 8px; text-align: center;">${subject || 'Newsletter'}</h1>${newsletterHtml}`;
+      setCleanHtml(htmlToStore);
     }
-  }, [newsletterHtml]);
+  }, [newsletterHtml, hasTitle, subject]);
 
   // Auto-save functionality (only for subject line changes)
   // Note: Article edits are already auto-saved via onEditArticle
@@ -272,9 +276,9 @@ export function DraftEditorModal({
         });
       }
 
-      // Update BOTH cleanHtml and newsletterHtml states
+      // Update ONLY cleanHtml (don't update newsletterHtml to avoid duplication)
+      // The rendering now uses cleanHtml directly, so this is the single source of truth
       setCleanHtml(updatedCleanHtml);
-      setNewsletterHtml(updatedCleanHtml);
       setEditingSection(null);
 
       toast({
@@ -402,11 +406,11 @@ export function DraftEditorModal({
         });
       }
     };
-  }, [newsletterHtml, items, viewMode]);
+  }, [cleanHtml, items, viewMode]);
 
   // Add feedback buttons to articles
   useEffect(() => {
-    if (!previewRef.current || !items || !newsletterHtml || viewMode !== 'preview') return;
+    if (!previewRef.current || !items || !cleanHtml || viewMode !== 'preview') return;
 
     // Find all h2 elements (article titles)
     const articleTitles = previewRef.current.querySelectorAll('h2');
@@ -468,7 +472,7 @@ export function DraftEditorModal({
 
       title.appendChild(feedbackContainer);
     });
-  }, [newsletterHtml, items, viewMode]);
+  }, [cleanHtml, items, viewMode]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -623,9 +627,7 @@ export function DraftEditorModal({
                   <div
                     ref={previewRef}
                     dangerouslySetInnerHTML={{
-                      __html: hasTitle
-                        ? newsletterHtml
-                        : `<h1 style="color: #111827; font-size: 32px; font-weight: 800; margin-bottom: 8px; text-align: center;">${subject || 'Newsletter'}</h1>${newsletterHtml}`
+                      __html: cleanHtml || newsletterHtml
                     }}
                   />
                 </div>
