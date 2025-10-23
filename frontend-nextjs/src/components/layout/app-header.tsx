@@ -7,7 +7,7 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { authApi } from '@/lib/api/auth';
 import { workspacesApi } from '@/lib/api/workspaces';
-import { Home, Settings, ChevronDown, FileText, Building2, Check } from 'lucide-react';
+import { Home, Settings, ChevronDown, FileText, Building2, Check, Plus } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -99,8 +99,8 @@ export function AppHeader() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            {/* Workspace Switcher (for agency users with multiple workspaces) */}
-            {workspaces.length > 1 && currentWorkspace && (
+            {/* Workspace Switcher (always visible - shows current workspace + create option) */}
+            {currentWorkspace && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -144,16 +144,16 @@ export function AppHeader() {
                       )}
                     </DropdownMenuItem>
                   ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => router.push('/app/settings')}
+                    className="flex items-center gap-2 cursor-pointer text-primary font-medium"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create New Workspace
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            )}
-
-            {/* Current Workspace Label (for single workspace users) */}
-            {workspaces.length === 1 && currentWorkspace && (
-              <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground px-3 py-2 rounded-xl bg-muted/50">
-                <Building2 className="h-4 w-4" />
-                <span className="font-medium">{currentWorkspace.name}</span>
-              </div>
             )}
 
             {/* User Menu */}

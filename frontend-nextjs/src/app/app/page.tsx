@@ -24,7 +24,6 @@ import { WelcomeSection } from '@/components/dashboard/welcome-section';
 import { EnhancedDraftCard } from '@/components/dashboard/enhanced-draft-card';
 import { UnifiedSourceSetup } from '@/components/dashboard/unified-source-setup';
 import { MotivationalTip } from '@/components/dashboard/motivational-tip';
-import { WorkspaceManagement } from '@/components/dashboard/workspace-management';
 import { DraftEditorModal } from '@/components/modals/draft-editor-modal';
 import { SendConfirmationModal } from '@/components/modals/send-confirmation-modal';
 import { AddSourceModal } from '@/components/modals/add-source-modal';
@@ -949,20 +948,6 @@ export default function DashboardPage() {
                 />
               )}
             </div>
-          )}
-
-          {/* Workspace Management - Available for both individual and agency users */}
-          {!isLoading && (
-            <WorkspaceManagement
-              onWorkspaceCreated={async () => {
-                // Refresh workspace list
-                const workspaces = await workspacesApi.list();
-                if (workspaces && workspaces.length > 0) {
-                  setWorkspaceData(workspaces[workspaces.length - 1]);
-                  setCurrentWorkspace(workspaces[workspaces.length - 1]);
-                }
-              }}
-            />
           )}
 
           {/* Quick Source Manager - Show when sources exist */}
