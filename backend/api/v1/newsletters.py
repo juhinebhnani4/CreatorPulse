@@ -12,7 +12,8 @@ from backend.models.newsletter import (
     NewsletterResponse,
     NewsletterListResponse,
     NewsletterStatsResponse,
-    UpdateNewsletterRequest
+    UpdateNewsletterRequest,
+    UpdateNewsletterHtmlRequest
 )
 from backend.models.responses import APIResponse
 from backend.services.newsletter_service import newsletter_service
@@ -391,4 +392,51 @@ async def update_newsletter(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
+        )
+
+
+@router.patch("/{newsletter_id}/html", response_model=APIResponse)
+async def update_newsletter_html(
+    newsletter_id: str,
+    request: UpdateNewsletterHtmlRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Update newsletter HTML after user edits inline in preview.
+
+    This endpoint is called when user edits content directly in HTML preview.
+    The updated HTML will be sent when newsletter is delivered.
+
+    Requires: Authorization header with Bearer token
+
+    Args:
+        newsletter_id: Newsletter ID
+        request: Update HTML request with html_content field
+        user_id: User ID from JWT token
+
+    Returns:
+        APIResponse with updated newsletter
+    """
+    try:
+        updated_newsletter = await newsletter_service.update_newsletter_html(
+            newsletter_id=newsletter_id,
+            updated_html=request.html_content,
+            user_id=user_id
+        )
+
+        return APIResponse.success_response({
+            'newsletter': updated_newsletter,
+            'message': 'Newsletter HTML updated successfully'
+        })
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to update newsletter HTML: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update newsletter HTML: {str(e)}"
         )

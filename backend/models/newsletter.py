@@ -70,3 +70,8 @@ class UpdateNewsletterRequest(BaseModel):
     status: Optional[str] = Field(None, pattern="^(draft|sent|scheduled)$")
     sent_at: Optional[datetime] = None
 
+
+class UpdateNewsletterHtmlRequest(BaseModel):
+    """Request to update newsletter HTML after user edits."""
+    html_content: str = Field(..., min_length=1, description="Updated HTML content")
+

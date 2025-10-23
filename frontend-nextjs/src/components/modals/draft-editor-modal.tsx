@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,10 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { ArticleCard } from '@/components/dashboard/article-card';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Monitor, Smartphone, Save, Send, Clock, Eye, Edit3 } from 'lucide-react';
 import { newslettersApi } from '@/lib/api/newsletters';
+import { feedbackApi } from '@/lib/api/feedback';
 
 interface ContentItem {
   id: string;
@@ -61,6 +63,17 @@ export function DraftEditorModal({
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [newsletterHtml, setNewsletterHtml] = useState<string | null>(null);
   const [isLoadingHtml, setIsLoadingHtml] = useState(false);
+
+  // State for inline HTML editing
+  const [editingSection, setEditingSection] = useState<{
+    element: HTMLElement;
+    originalText: string;
+    xpath: string;
+    itemId: string | null;
+    type: 'title' | 'content';
+  } | null>(null);
+
+  const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSubject(initialSubject || '');
@@ -162,6 +175,265 @@ export function DraftEditorModal({
       : subjectLength <= 60
       ? 'text-green-600'
       : 'text-yellow-600';
+
+  // Helper functions for inline HTML editing
+  const getXPath = (element: HTMLElement): string => {
+    if (!element.parentElement) return '';
+    const index = Array.from(element.parentElement.children).indexOf(element);
+    return `${element.tagName}[${index}]`;
+  };
+
+  const getElementByXPath = (xpath: string): HTMLElement | null => {
+    if (!previewRef.current) return null;
+    const [tag, indexStr] = xpath.split('[');
+    const index = parseInt(indexStr?.replace(']', '') || '0');
+    const elements = previewRef.current.querySelectorAll(tag);
+    return (elements[index] as HTMLElement) || null;
+  };
+
+  const createFeedbackButton = (
+    emoji: string,
+    action: 'like' | 'dislike' | 'remove',
+    itemId: string
+  ): HTMLButtonElement => {
+    const btn = document.createElement('button');
+    btn.textContent = emoji;
+    btn.dataset.action = action;
+    btn.dataset.itemId = itemId;
+    btn.style.cssText = `
+      background: none;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 4px 8px;
+      margin: 0 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    `;
+    return btn;
+  };
+
+  // Handler for inline edit save
+  const handleSaveInlineEdit = async (newText: string) => {
+    if (!editingSection || !draftId) return;
+
+    try {
+      const originalText = editingSection.originalText;
+
+      // Update DOM
+      editingSection.element.textContent = newText;
+
+      // Get updated HTML
+      const updatedHtml = previewRef.current!.innerHTML;
+
+      // Update newsletter HTML in backend
+      await newslettersApi.updateHtml(draftId, updatedHtml);
+
+      // Record feedback (Stage 2: included_in_final=true)
+      if (editingSection.itemId) {
+        await feedbackApi.createItemFeedback({
+          content_item_id: editingSection.itemId,
+          rating: 'neutral',
+          included_in_final: true,
+          newsletter_id: draftId,
+          original_summary: originalText,
+          edited_summary: newText,
+          feedback_notes: `Inline ${editingSection.type} edit`,
+        });
+      }
+
+      // Update local state
+      setNewsletterHtml(updatedHtml);
+      setEditingSection(null);
+
+      toast({
+        title: 'Edit Saved',
+        description: 'Changes will appear in sent email',
+        duration: 3000,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Save Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Handler for article feedback buttons
+  const handleArticleFeedback = async (
+    action: 'like' | 'dislike' | 'remove',
+    itemId: string
+  ) => {
+    if (!draftId) return;
+
+    try {
+      if (action === 'like' || action === 'dislike') {
+        // Submit Stage 2 feedback (newsletter-level)
+        await feedbackApi.createItemFeedback({
+          content_item_id: itemId,
+          rating: action === 'like' ? 'positive' : 'negative',
+          included_in_final: true,
+          newsletter_id: draftId,
+          feedback_notes: `Article ${action}d in newsletter preview`,
+        });
+
+        toast({
+          title: action === 'like' ? '✓ Marked Helpful' : '✓ Marked Unhelpful',
+          description: 'Future newsletters will reflect this preference',
+          duration: 2000,
+        });
+      } else if (action === 'remove') {
+        // Record negative feedback
+        await feedbackApi.createItemFeedback({
+          content_item_id: itemId,
+          rating: 'negative',
+          included_in_final: false,
+          newsletter_id: draftId,
+          feedback_notes: 'Article removed from newsletter',
+        });
+
+        toast({
+          title: 'Feedback Recorded',
+          description: 'Article marked for removal preference',
+          duration: 2000,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Feedback Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Make HTML sections editable on preview render
+  useEffect(() => {
+    if (!previewRef.current || !newsletterHtml || !items || viewMode !== 'preview') return;
+
+    // Find all editable elements (h2 for titles, p for paragraphs)
+    const editableSelectors = 'h2, p';
+    const elements = previewRef.current.querySelectorAll(editableSelectors);
+
+    elements.forEach((el: Element, index) => {
+      const htmlEl = el as HTMLElement;
+      // Skip if already has edit handler
+      if (htmlEl.dataset.editable) return;
+
+      htmlEl.dataset.editable = 'true';
+      htmlEl.style.cursor = 'pointer';
+      htmlEl.title = 'Click to edit';
+      htmlEl.style.transition = 'background-color 0.2s';
+
+      const handleMouseEnter = () => {
+        htmlEl.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+      };
+
+      const handleMouseLeave = () => {
+        htmlEl.style.backgroundColor = 'transparent';
+      };
+
+      const handleClick = (e: Event) => {
+        e.stopPropagation();
+
+        // Try to map to content item (by index)
+        const sectionIndex = Math.floor(index / 2); // Approximate mapping
+        const itemId = items[sectionIndex]?.id || null;
+
+        setEditingSection({
+          element: htmlEl,
+          originalText: htmlEl.textContent || '',
+          xpath: getXPath(htmlEl),
+          itemId: itemId,
+          type: htmlEl.tagName === 'H2' ? 'title' : 'content',
+        });
+      };
+
+      htmlEl.addEventListener('mouseenter', handleMouseEnter);
+      htmlEl.addEventListener('mouseleave', handleMouseLeave);
+      htmlEl.addEventListener('click', handleClick);
+    });
+
+    // Cleanup
+    return () => {
+      if (previewRef.current) {
+        const elements = previewRef.current.querySelectorAll('[data-editable]');
+        elements.forEach((el) => {
+          const htmlEl = el as HTMLElement;
+          htmlEl.removeEventListener('mouseenter', () => {});
+          htmlEl.removeEventListener('mouseleave', () => {});
+          htmlEl.removeEventListener('click', () => {});
+        });
+      }
+    };
+  }, [newsletterHtml, items, viewMode]);
+
+  // Add feedback buttons to articles
+  useEffect(() => {
+    if (!previewRef.current || !items || !newsletterHtml || viewMode !== 'preview') return;
+
+    // Find all h2 elements (article titles)
+    const articleTitles = previewRef.current.querySelectorAll('h2');
+
+    articleTitles.forEach((title, index) => {
+      if (index >= items.length) return;
+
+      const item = items[index];
+
+      // Skip if already has feedback buttons
+      if (title.querySelector('.feedback-buttons')) return;
+
+      // Create feedback button container
+      const feedbackContainer = document.createElement('div');
+      feedbackContainer.className = 'feedback-buttons';
+      feedbackContainer.style.cssText = `
+        display: inline-block;
+        margin-left: 12px;
+        vertical-align: middle;
+      `;
+
+      // Create buttons
+      const likeBtn = createFeedbackButton('👍', 'like', item.id);
+      const dislikeBtn = createFeedbackButton('👎', 'dislike', item.id);
+      const removeBtn = createFeedbackButton('🗑️', 'remove', item.id);
+
+      // Add click handlers
+      likeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleArticleFeedback('like', item.id);
+      });
+
+      dislikeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleArticleFeedback('dislike', item.id);
+      });
+
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleArticleFeedback('remove', item.id);
+      });
+
+      // Add hover effects
+      [likeBtn, dislikeBtn, removeBtn].forEach((btn) => {
+        btn.addEventListener('mouseenter', () => {
+          btn.style.backgroundColor = '#f3f4f6';
+          btn.style.transform = 'scale(1.1)';
+        });
+
+        btn.addEventListener('mouseleave', () => {
+          btn.style.backgroundColor = 'transparent';
+          btn.style.transform = 'scale(1)';
+        });
+      });
+
+      feedbackContainer.appendChild(likeBtn);
+      feedbackContainer.appendChild(dislikeBtn);
+      feedbackContainer.appendChild(removeBtn);
+
+      title.appendChild(feedbackContainer);
+    });
+  }, [newsletterHtml, items, viewMode]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -313,7 +585,7 @@ export function DraftEditorModal({
                   }`}
                   style={{ minHeight: '400px' }}
                 >
-                  <div dangerouslySetInnerHTML={{ __html: newsletterHtml }} />
+                  <div ref={previewRef} dangerouslySetInnerHTML={{ __html: newsletterHtml }} />
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-64 border rounded-lg">
@@ -364,6 +636,57 @@ export function DraftEditorModal({
           </div>
         </DialogFooter>
       </DialogContent>
+
+      {/* Edit Dialog for inline editing */}
+      {editingSection && (
+        <Dialog open={true} onOpenChange={() => setEditingSection(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                Edit {editingSection.type === 'title' ? 'Title' : 'Content'}
+              </DialogTitle>
+              <DialogDescription>
+                Make inline changes to the newsletter content
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <Textarea
+                id="edit-text"
+                defaultValue={editingSection.originalText}
+                rows={editingSection.type === 'title' ? 2 : 6}
+                className="w-full"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && e.ctrlKey) {
+                    handleSaveInlineEdit(e.currentTarget.value);
+                  } else if (e.key === 'Escape') {
+                    setEditingSection(null);
+                  }
+                }}
+              />
+
+              <div className="text-sm text-muted-foreground">
+                💡 Press <kbd className="px-2 py-1 bg-gray-100 rounded">Ctrl+Enter</kbd> to save, <kbd className="px-2 py-1 bg-gray-100 rounded">Esc</kbd> to cancel
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingSection(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const textarea = document.getElementById('edit-text') as HTMLTextAreaElement;
+                  if (textarea) handleSaveInlineEdit(textarea.value);
+                }}
+              >
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

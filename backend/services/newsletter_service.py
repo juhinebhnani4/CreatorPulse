@@ -290,6 +290,7 @@ class NewsletterService:
 
         return {
             'newsletter': newsletter,
+            'items': content_items_dicts,  # Include items array for frontend Edit mode and feedback buttons
             'content_items_count': len(content_items_dicts),
             'sources_used': list(set(item.get('source', 'unknown') for item in content_items_dicts)),
             'trends_applied': len(trends) if trends else 0,
@@ -367,6 +368,7 @@ class NewsletterService:
 
         return {
             'newsletter': newsletter,
+            'items': content_items_dicts,  # Include items array for frontend Edit mode and feedback buttons
             'content_items_count': len(content_items_dicts),
             'sources_used': list(set(item.get('source', 'unknown') for item in content_items_dicts)),
             'trends_applied': len(trends) if trends else 0,
@@ -374,6 +376,43 @@ class NewsletterService:
             'style_profile_applied': style_profile is not None,
             'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
         }
+
+    async def update_newsletter_html(
+        self,
+        newsletter_id: str,
+        updated_html: str,
+        user_id: str
+    ) -> Dict[str, Any]:
+        """
+        Update newsletter HTML content after user inline edits.
+
+        Args:
+            newsletter_id: Newsletter ID
+            updated_html: Updated HTML content
+            user_id: User ID (for authorization)
+
+        Returns:
+            Updated newsletter object
+        """
+        from datetime import datetime
+
+        # Verify user has access to this newsletter's workspace
+        newsletter = self.supabase.get_newsletter(newsletter_id)
+        if not newsletter:
+            raise ValueError("Newsletter not found")
+
+        # Update HTML content
+        updated_newsletter = self.supabase.update_newsletter(
+            newsletter_id=newsletter_id,
+            content_html=updated_html,
+            metadata={
+                **newsletter.get('metadata', {}),
+                'html_edited_at': datetime.now().isoformat(),
+                'edited_by': user_id
+            }
+        )
+
+        return updated_newsletter
 
     def _populate_newsletter_items(self, newsletter: Dict[str, Any]) -> Dict[str, Any]:
         """
