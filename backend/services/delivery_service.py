@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from ai_newsletter.database.supabase_client import SupabaseManager
 from ai_newsletter.delivery.email_sender import EmailSender
 from ai_newsletter.config.settings import get_settings
+from backend.services.tracking_service import TrackingService
+from backend.services.analytics_service import AnalyticsService
 
 
 class DeliveryService:
@@ -23,6 +25,8 @@ class DeliveryService:
         """Initialize delivery service."""
         self._db = None
         self._email_sender = None
+        self._tracking_service = None
+        self._analytics_service = None
 
     @property
     def db(self):
@@ -38,6 +42,20 @@ class DeliveryService:
             settings = get_settings()
             self._email_sender = EmailSender(config=settings.email)
         return self._email_sender
+
+    @property
+    def tracking_service(self):
+        """Lazy-load TrackingService."""
+        if self._tracking_service is None:
+            self._tracking_service = TrackingService()
+        return self._tracking_service
+
+    @property
+    def analytics_service(self):
+        """Lazy-load AnalyticsService."""
+        if self._analytics_service is None:
+            self._analytics_service = AnalyticsService()
+        return self._analytics_service
 
     async def send_newsletter(
         self,
@@ -106,14 +124,53 @@ class DeliveryService:
 
             for subscriber in subscribers:
                 try:
+                    # Add tracking pixel and click tracking to HTML (personalized per recipient)
+                    tracked_html = self.tracking_service.add_tracking_to_html(
+                        html_content=newsletter['content_html'],
+                        newsletter_id=newsletter_id,
+                        recipient_email=subscriber['email'],
+                        workspace_id=workspace_id,
+                        content_items=newsletter.get('content_items', [])
+                    )
+
+                    # Add unsubscribe link (CAN-SPAM compliance)
+                    tracked_html = self.tracking_service.add_unsubscribe_link(
+                        html_content=tracked_html,
+                        workspace_id=workspace_id,
+                        recipient_email=subscriber['email']
+                    )
+
+                    # Note: List-Unsubscribe headers will be added in future EmailSender enhancement
+                    # For now, unsubscribe link in footer is sufficient for CAN-SPAM compliance
+
+                    # Send email with tracked HTML
                     success = self.email_sender.send_newsletter(
                         to_email=subscriber['email'],
-                        subject=newsletter['title'],
-                        html_content=newsletter['content_html'],
+                        subject=newsletter.get('subject_line') or newsletter['title'],
+                        html_content=tracked_html,
                         text_content=newsletter.get('content_text')
                     )
 
                     if success:
+                        # Record 'sent' event in analytics
+                        await self.analytics_service.record_event(
+                            workspace_id=workspace_id,
+                            newsletter_id=newsletter_id,
+                            event_type='sent',
+                            recipient_email=subscriber['email'],
+                            subscriber_id=subscriber.get('id')
+                        )
+
+                        # Record 'delivered' event (assume immediate delivery for SMTP)
+                        # Note: For SendGrid, this should come from webhook
+                        await self.analytics_service.record_event(
+                            workspace_id=workspace_id,
+                            newsletter_id=newsletter_id,
+                            event_type='delivered',
+                            recipient_email=subscriber['email'],
+                            subscriber_id=subscriber.get('id')
+                        )
+
                         sent_count += 1
                         # Update subscriber last_sent_at
                         self.db.update_subscriber(subscriber['id'], {
@@ -127,6 +184,7 @@ class DeliveryService:
                     failed_count += 1
                     error_msg = f"Error sending to {subscriber['email']}: {str(e)}"
                     errors.append(error_msg)
+                    print(f"[DeliveryService] {error_msg}")
 
             # Update delivery record
             self.db.update_delivery(delivery['id'], {
@@ -163,7 +221,7 @@ class DeliveryService:
         test_email: str
     ) -> Dict[str, Any]:
         """
-        Send newsletter to test email.
+        Send newsletter to test email with tracking enabled.
 
         Args:
             newsletter: Newsletter data
@@ -173,14 +231,41 @@ class DeliveryService:
             Test send result
         """
         try:
+            # Add tracking to test email as well
+            tracked_html = self.tracking_service.add_tracking_to_html(
+                html_content=newsletter['content_html'],
+                newsletter_id=newsletter['id'],
+                recipient_email=test_email,
+                workspace_id=newsletter['workspace_id'],
+                content_items=newsletter.get('content_items', [])
+            )
+
+            # Add unsubscribe link
+            tracked_html = self.tracking_service.add_unsubscribe_link(
+                html_content=tracked_html,
+                workspace_id=newsletter['workspace_id'],
+                recipient_email=test_email
+            )
+
+            # Note: List-Unsubscribe headers will be added in future EmailSender enhancement
+
             success = self.email_sender.send_newsletter(
                 to_email=test_email,
-                subject=f"[TEST] {newsletter['title']}",
-                html_content=newsletter['content_html'],
+                subject=f"[TEST] {newsletter.get('subject_line') or newsletter['title']}",
+                html_content=tracked_html,
                 text_content=newsletter.get('content_text')
             )
 
             if success:
+                # Record test send in analytics (marked with test email)
+                await self.analytics_service.record_event(
+                    workspace_id=newsletter['workspace_id'],
+                    newsletter_id=newsletter['id'],
+                    event_type='sent',
+                    recipient_email=test_email,
+                    subscriber_id=None  # Test sends have no subscriber ID
+                )
+
                 return {
                     'delivery_id': None,
                     'newsletter_id': newsletter['id'],
@@ -189,7 +274,8 @@ class DeliveryService:
                     'failed_count': 0,
                     'status': 'completed',
                     'test_mode': True,
-                    'test_email': test_email
+                    'test_email': test_email,
+                    'tracking_enabled': True
                 }
             else:
                 raise Exception("Failed to send test email")
