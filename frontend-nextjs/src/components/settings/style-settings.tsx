@@ -89,7 +89,7 @@ export function StyleSettings() {
       setProfile(result.profile);
       setSummary({
         has_profile: true,
-        sample_count: validSamples.length,
+        trained_on_count: validSamples.length,
         tone: result.profile.tone,
         formality: result.profile.formality,
         last_updated: result.profile.updated_at,
@@ -125,7 +125,7 @@ export function StyleSettings() {
       });
 
       setProfile(null);
-      setSummary({ has_profile: false, sample_count: 0 });
+      setSummary({ has_profile: false, trained_on_count: 0 });
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -168,7 +168,7 @@ export function StyleSettings() {
                   <div>
                     <h3 className="font-semibold mb-1">Style Profile Active</h3>
                     <p className="text-sm text-muted-foreground">
-                      Trained on {summary.sample_count} newsletter samples
+                      Trained on {summary.trained_on_count} newsletter samples
                     </p>
                   </div>
                 </div>

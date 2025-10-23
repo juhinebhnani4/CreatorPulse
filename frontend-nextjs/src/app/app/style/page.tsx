@@ -120,7 +120,7 @@ export default function StyleProfilePage() {
       setProfile(response.profile);
       setSummary({
         has_profile: true,
-        sample_count: response.profile.sample_count,
+        trained_on_count: response.profile.trained_on_count,
         tone: response.profile.tone,
         formality: response.profile.formality,
         last_updated: response.profile.updated_at,
@@ -214,7 +214,7 @@ export default function StyleProfilePage() {
                   Style Profile Active
                 </p>
                 <p className="text-sm text-orange-700 dark:text-orange-300">
-                  Trained on {summary.sample_count} samples • {summary.tone} • {summary.formality}
+                  Trained on {summary.trained_on_count} samples • {summary.tone} • {summary.formality}
                 </p>
               </div>
             </div>
@@ -449,7 +449,7 @@ function ProfileViewSection({ profile, loading }: { profile: StyleProfile | null
           <div className="flex-1">
             <h3 className="font-semibold text-orange-900 dark:text-orange-100">Training Complete</h3>
             <p className="text-sm text-orange-700 dark:text-orange-300">
-              Profile trained on {profile.sample_count} newsletters • Last updated{' '}
+              Profile trained on {profile.trained_on_count} newsletters • Last updated{' '}
               {new Date(profile.updated_at).toLocaleDateString()}
             </p>
           </div>

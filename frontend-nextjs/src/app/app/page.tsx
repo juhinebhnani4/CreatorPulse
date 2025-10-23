@@ -861,10 +861,9 @@ export default function DashboardPage() {
   };
 
   // Calculate setup progress based on real data
-  const setupSteps = 3; // sources, email, subscribers
-  const hasEmailConfig = config?.delivery?.method ? true : false;
+  const setupSteps = 2; // sources, subscribers
   const hasSubscribers = subscriberCount > 0;
-  const completedSteps = (hasSources ? 1 : 0) + (hasEmailConfig ? 1 : 0) + (hasSubscribers ? 1 : 0);
+  const completedSteps = (hasSources ? 1 : 0) + (hasSubscribers ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-muted/20">

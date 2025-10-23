@@ -5,8 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import { ChevronDown } from 'lucide-react';
 import { SourcesSettings } from '@/components/settings/sources-settings';
 import { ScheduleSettings } from '@/components/settings/schedule-settings';
-import { EmailSettings } from '@/components/settings/email-settings';
-import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import { SubscribersSettings } from '@/components/settings/subscribers-settings';
 import { WorkspaceSettings } from '@/components/settings/workspace-settings';
 import { StyleSettings } from '@/components/settings/style-settings';
@@ -43,8 +41,6 @@ export default function SettingsPage() {
   const setupSteps = [
     { id: 'sources', label: 'Content Sources', completed: true },
     { id: 'schedule', label: 'Schedule', completed: true },
-    { id: 'email', label: 'Email Config', completed: true },
-    { id: 'api-keys', label: 'API Keys', completed: false },
     { id: 'style', label: 'Writing Style', completed: false },
   ];
 
@@ -77,15 +73,6 @@ export default function SettingsPage() {
       description: 'Manage your subscriber list and import contacts',
     },
     {
-      id: 'email',
-      title: '📧 Email Configuration',
-      icon: '📧',
-      component: <EmailSettings />,
-      status: 'configured' as const,
-      statusText: 'Configured',
-      description: 'Connect your email provider for delivery',
-    },
-    {
       id: 'workspace',
       title: '🏢 Workspace',
       icon: '🏢',
@@ -93,16 +80,6 @@ export default function SettingsPage() {
       status: 'configured' as const,
       statusText: 'My Workspace',
       description: 'Manage workspace settings and team members',
-    },
-    {
-      id: 'api-keys',
-      title: '🔑 API Keys',
-      icon: '🔑',
-      component: <ApiKeysSettings />,
-      status: 'incomplete' as const,
-      statusText: 'Not set up',
-      description: 'Configure API keys for integrations',
-      isAdvanced: true,
     },
     {
       id: 'style',

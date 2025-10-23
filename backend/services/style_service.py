@@ -456,7 +456,11 @@ class StyleAnalysisService(BaseService):
         else:
             # Create new
             self.logger.info(f"Creating new style profile for workspace {workspace_id}")
-            result = self.db.create_style_profile(profile_data.model_dump(mode='json'))
+            # Use model_dump() without mode='json' to preserve UUID objects for database
+            profile_dict = profile_data.model_dump()
+            # Convert UUID to string for Supabase compatibility
+            profile_dict['workspace_id'] = str(profile_dict['workspace_id'])
+            result = self.db.create_style_profile(profile_dict)
 
         return StyleProfileResponse(**result)
 
