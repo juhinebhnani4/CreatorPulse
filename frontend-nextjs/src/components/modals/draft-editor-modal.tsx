@@ -75,6 +75,10 @@ export function DraftEditorModal({
 
   const previewRef = useRef<HTMLDivElement>(null);
 
+  // State for tracking title presence and clean HTML (without dynamic UI elements)
+  const [hasTitle, setHasTitle] = useState(false);
+  const [cleanHtml, setCleanHtml] = useState<string>('');
+
   useEffect(() => {
     setSubject(initialSubject || '');
     setItems(initialItems || []);
@@ -97,7 +101,17 @@ export function DraftEditorModal({
         });
 
         // Use content_html field (correct field name)
-        setNewsletterHtml(newsletter.content_html || '');
+        const html = newsletter.content_html || '';
+        setNewsletterHtml(html);
+
+        // Check if h1 exists
+        const hasH1 = /<h1[^>]*>/.test(html);
+        setHasTitle(hasH1);
+
+        // If no h1, we'll add it in rendering
+        if (!hasH1) {
+          console.warn('[DraftEditorModal] No h1 tag found in HTML, will prepend title');
+        }
       } catch (error) {
         console.error('[DraftEditorModal] Failed to fetch newsletter HTML:', error);
         toast({
@@ -112,6 +126,13 @@ export function DraftEditorModal({
 
     fetchNewsletterHtml();
   }, [open, draftId]);
+
+  // Initialize clean HTML state when newsletter HTML loads
+  useEffect(() => {
+    if (newsletterHtml) {
+      setCleanHtml(newsletterHtml);
+    }
+  }, [newsletterHtml]);
 
   // Auto-save functionality (only for subject line changes)
   // Note: Article edits are already auto-saved via onEditArticle
@@ -220,14 +241,33 @@ export function DraftEditorModal({
     try {
       const originalText = editingSection.originalText;
 
-      // Update DOM
-      editingSection.element.textContent = newText;
+      // Parse cleanHtml (NOT live DOM) to avoid capturing dynamic UI
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(cleanHtml, 'text/html');
 
-      // Get updated HTML
-      const updatedHtml = previewRef.current!.innerHTML;
+      // Find element using xpath
+      const xpath = editingSection.xpath;
+      const tagMatch = xpath.match(/^(\w+)\[(\d+)\]$/);
+      if (!tagMatch) {
+        throw new Error('Invalid xpath format');
+      }
 
-      // Update newsletter HTML in backend
-      await newslettersApi.updateHtml(draftId, updatedHtml);
+      const [_, tagName, indexStr] = tagMatch;
+      const targetIndex = parseInt(indexStr, 10);
+      const elements = doc.querySelectorAll(tagName);
+
+      if (!elements[targetIndex]) {
+        throw new Error(`Element not found at ${xpath}`);
+      }
+
+      // Update text in parsed document
+      elements[targetIndex].textContent = newText;
+
+      // Serialize back to clean HTML string
+      const updatedCleanHtml = doc.body.innerHTML;
+
+      // Save to backend
+      await newslettersApi.updateHtml(draftId, updatedCleanHtml);
 
       // Record feedback (Stage 2: included_in_final=true)
       if (editingSection.itemId) {
@@ -242,8 +282,9 @@ export function DraftEditorModal({
         });
       }
 
-      // Update local state
-      setNewsletterHtml(updatedHtml);
+      // Update BOTH cleanHtml and newsletterHtml states
+      setCleanHtml(updatedCleanHtml);
+      setNewsletterHtml(updatedCleanHtml);
       setEditingSection(null);
 
       toast({
@@ -252,6 +293,7 @@ export function DraftEditorModal({
         duration: 3000,
       });
     } catch (error: any) {
+      console.error('[handleSaveInlineEdit] Error:', error);
       toast({
         title: 'Save Failed',
         description: error.message,
@@ -377,9 +419,9 @@ export function DraftEditorModal({
     const articleTitles = previewRef.current.querySelectorAll('h2');
 
     articleTitles.forEach((title, index) => {
-      if (index >= items.length) return;
-
-      const item = items[index];
+      // Map themes to items using modulo (wrap around if more themes than items)
+      const item = items[index % items.length];
+      if (!item) return; // Safety check
 
       // Skip if already has feedback buttons
       if (title.querySelector('.feedback-buttons')) return;
@@ -585,7 +627,14 @@ export function DraftEditorModal({
                   }`}
                   style={{ minHeight: '400px' }}
                 >
-                  <div ref={previewRef} dangerouslySetInnerHTML={{ __html: newsletterHtml }} />
+                  <div
+                    ref={previewRef}
+                    dangerouslySetInnerHTML={{
+                      __html: hasTitle
+                        ? newsletterHtml
+                        : `<h1 style="color: #111827; font-size: 32px; font-weight: 800; margin-bottom: 8px; text-align: center;">${subject || 'Newsletter'}</h1>${newsletterHtml}`
+                    }}
+                  />
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-64 border rounded-lg">
