@@ -404,11 +404,13 @@ class NewsletterService:
         # Update HTML content
         updated_newsletter = self.supabase.update_newsletter(
             newsletter_id=newsletter_id,
-            content_html=updated_html,
-            metadata={
-                **newsletter.get('metadata', {}),
-                'html_edited_at': datetime.now().isoformat(),
-                'edited_by': user_id
+            updates={
+                'content_html': updated_html,
+                'metadata': {
+                    **newsletter.get('metadata', {}),
+                    'html_edited_at': datetime.now().isoformat(),
+                    'edited_by': user_id
+                }
             }
         )
 
