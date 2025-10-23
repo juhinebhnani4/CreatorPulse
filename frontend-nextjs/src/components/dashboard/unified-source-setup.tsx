@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -72,8 +72,15 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false, existing
   };
 
   const detectSourceType = (line: string): ParsedSource | null => {
-    const trimmed = line.trim();
+    let trimmed = line.trim();
     if (!trimmed) return null;
+
+    // Auto-normalize bare domains (e.g., "openai.com" → "https://openai.com")
+    // Matches: domain.com, sub.domain.com, domain.co.uk (requires TLD)
+    // Prevents XSS: No <script>, no javascript:, validates with URL constructor
+    if (/^[\w.-]+\.[a-z]{2,}$/i.test(trimmed) && !trimmed.startsWith('http')) {
+      trimmed = `https://${trimmed}`;
+    }
 
     // ========================================
     // STEP 1: Reddit (r/name pattern)
@@ -310,8 +317,11 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false, existing
     return Array.from(sourcesMap.values());
   };
 
+  // Memoize parsed sources to avoid re-parsing on every render
+  const parsedSources = useMemo(() => parseInput(), [input, existingSources]);
+
   const handleSubmit = () => {
-    const sources = parseInput();
+    const sources = parsedSources;
 
     if (sources.length === 0) {
       toast({
@@ -482,12 +492,12 @@ https://blog.openai.com/feed
           <div className="flex justify-center">
             <Button
               onClick={handleSubmit}
-              disabled={!input.trim() || isLoading || parseInput().length === 0}
+              disabled={!input.trim() || isLoading || parsedSources.length === 0}
               className="bg-gradient-warm hover:opacity-90 h-12 px-8 text-base font-semibold shadow-lg hover:shadow-xl transition-all"
             >
               <Sparkles className="h-5 w-5 mr-2" />
-              {parseInput().length > 0
-                ? `Save ${parseInput().length} Source${parseInput().length !== 1 ? 's' : ''} & Generate Newsletter`
+              {parsedSources.length > 0
+                ? `Save ${parsedSources.length} Source${parsedSources.length !== 1 ? 's' : ''} & Generate Newsletter`
                 : 'Save Sources & Generate'
               }
               <ArrowRight className="h-5 w-5 ml-2" />
@@ -495,20 +505,20 @@ https://blog.openai.com/feed
           </div>
 
           {/* Live Preview - Clean & User-Friendly */}
-          {input.trim() && parseInput().length > 0 && (
+          {input.trim() && parsedSources.length > 0 && (
             <div className="pt-4 border-t">
               <div className="bg-gradient-to-br from-primary/5 to-secondary/5 border border-primary/20 rounded-xl p-5 space-y-4">
                 {/* Header */}
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
                   <p className="text-sm font-semibold text-foreground">
-                    We detected {parseInput().length} unique source{parseInput().length !== 1 ? 's' : ''}:
+                    We detected {parsedSources.length} unique source{parsedSources.length !== 1 ? 's' : ''}:
                   </p>
                 </div>
 
                 {/* Source List */}
                 <div className="space-y-3">
-                  {parseInput().map((source, idx) => (
+                  {parsedSources.map((source, idx) => (
                     <div
                       key={idx}
                       className={`flex items-start gap-3 animate-slide-up ${
