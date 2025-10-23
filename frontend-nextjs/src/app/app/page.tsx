@@ -13,6 +13,7 @@ import { schedulerApi } from '@/lib/api/scheduler';
 import { subscribersApi } from '@/lib/api/subscribers';
 import { analyticsApi } from '@/lib/api/analytics';
 import { transformNewsletterItemToFrontend } from '@/lib/utils/type-transformers';
+import { useDashboardData, useInvalidateConfig, useInvalidateNewsletters, useInvalidateContentStats, useInvalidateTopStories } from '@/lib/api/queries/dashboard';
 import { Button } from '@/components/ui/button';
 import { DraftStatusCard } from '@/components/dashboard/draft-status-card';
 import { ArticleCard } from '@/components/dashboard/article-card';
@@ -24,6 +25,8 @@ import { WelcomeSection } from '@/components/dashboard/welcome-section';
 import { EnhancedDraftCard } from '@/components/dashboard/enhanced-draft-card';
 import { UnifiedSourceSetup } from '@/components/dashboard/unified-source-setup';
 import { MotivationalTip } from '@/components/dashboard/motivational-tip';
+import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
+import { TopStories } from '@/components/dashboard/top-stories';
 import { DraftEditorModal } from '@/components/modals/draft-editor-modal';
 import { SendConfirmationModal } from '@/components/modals/send-confirmation-modal';
 import { AddSourceModal } from '@/components/modals/add-source-modal';
@@ -40,18 +43,28 @@ export default function DashboardPage() {
   const { user, isAuthenticated, clearAuth, _hasHydrated } = useAuthStore();
   const { currentWorkspace, setCurrentWorkspace } = useWorkspaceStore();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
-
-  // Real API data
-  const [workspace, setWorkspaceData] = useState<Workspace | null>(null);
-  const [config, setConfig] = useState<WorkspaceConfig | null>(null);
-  const [latestNewsletter, setLatestNewsletter] = useState<Newsletter | null>(null);
-  const [contentStats, setContentStats] = useState<ContentStats | null>(null);
-  const [subscriberCount, setSubscriberCount] = useState<number>(0);
-  const [analyticsData, setAnalyticsData] = useState<any | null>(null);
-  const [hasSources, setHasSources] = useState(false);
   const [draftStatus, setDraftStatus] = useState<'ready' | 'generating' | 'scheduled' | 'stale' | 'empty'>('empty');
+
+  // Fetch all dashboard data using React Query (with caching!)
+  const {
+    workspaces,
+    workspace,
+    config,
+    contentStats,
+    latestNewsletter,
+    subscriberCount,
+    analyticsData,
+    hasSources,
+    isLoading,
+    workspaceId,
+  } = useDashboardData(currentWorkspace?.id);
+
+  // Cache invalidation hooks
+  const invalidateConfig = useInvalidateConfig();
+  const invalidateNewsletters = useInvalidateNewsletters();
+  const invalidateContentStats = useInvalidateContentStats();
+  const invalidateTopStories = useInvalidateTopStories();
 
   // Modal states
   const [showDraftEditor, setShowDraftEditor] = useState(false);
@@ -65,315 +78,72 @@ export default function DashboardPage() {
     setIsMounted(true);
   }, []);
 
-  // Fetch workspace and newsletter data
+  // Redirect to login if not authenticated
   useEffect(() => {
     if (!isMounted || !_hasHydrated) return;
 
     if (!isAuthenticated) {
       router.push('/login');
+    }
+  }, [isAuthenticated, isMounted, _hasHydrated, router]);
+
+  // Update workspace in store when data loads
+  useEffect(() => {
+    if (workspace && workspace.id !== currentWorkspace?.id) {
+      setCurrentWorkspace(workspace);
+    }
+  }, [workspace, currentWorkspace?.id, setCurrentWorkspace]);
+
+  // Calculate draft status based on fetched data
+  useEffect(() => {
+    if (!latestNewsletter || !contentStats) {
+      setDraftStatus(hasSources ? 'empty' : 'empty');
       return;
     }
 
-    async function fetchData() {
-      try {
-        setIsLoading(true);
-
-        // Get user's workspaces
-        const workspaces = await workspacesApi.list();
-        console.log('[Dashboard] Fetched workspaces:', workspaces);
-
-        if (!workspaces || workspaces.length === 0) {
-          // Create a default workspace
-          try {
-            const newWorkspace = await workspacesApi.create({
-              name: `${user?.username || 'My'} Workspace`,
-              description: 'Default workspace',
-            });
-            setWorkspaceData(newWorkspace);
-            setCurrentWorkspace(newWorkspace);
-
-            toast({
-              title: '✓ Workspace Created',
-              description: 'Your workspace is ready to use',
-            });
-          } catch (error: any) {
-            console.error('Workspace creation error:', error);
-
-            // If workspace already exists or creation failed, try fetching again
-            if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
-              console.log('[Dashboard] Workspace might already exist, retrying fetch...');
-              try {
-                const retryWorkspaces = await workspacesApi.list();
-                if (retryWorkspaces && retryWorkspaces.length > 0) {
-                  console.log('[Dashboard] Found existing workspace:', retryWorkspaces[0]);
-                  setWorkspaceData(retryWorkspaces[0]);
-                  setCurrentWorkspace(retryWorkspaces[0]);
-
-                  toast({
-                    title: 'Workspace Loaded',
-                    description: 'Using your existing workspace',
-                  });
-                } else {
-                  throw new Error('No workspace found after retry');
-                }
-              } catch (retryError) {
-                console.error('Retry fetch failed:', retryError);
-                throw error; // Re-throw original error
-              }
-            } else {
-              // Different error - show to user
-              toast({
-                title: 'Workspace Creation Failed',
-                description: error.message || 'Failed to create workspace',
-                variant: 'destructive',
-              });
-              throw error;
-            }
-          }
-        } else {
-          // Use first workspace or current workspace from store
-          const ws = currentWorkspace
-            ? workspaces.find(w => w.id === currentWorkspace.id) || workspaces[0]
-            : workspaces[0];
-
-          if (!ws) {
-            throw new Error('No workspace found');
-          }
-
-          setWorkspaceData(ws);
-          setCurrentWorkspace(ws);
-
-          // Fetch workspace config
-          let wsConfig = null;
-          try {
-            wsConfig = await workspacesApi.getConfig(ws.id);
-
-            // Clean and validate sources
-            if (wsConfig.sources) {
-              const originalCount = wsConfig.sources.length;
-              const cleanedSources = wsConfig.sources.filter((source: any) => {
-                // FIX 4: Remove sources with empty configs (no actual sources configured)
-                const hasContent =
-                  (source.config?.subreddits && source.config.subreddits.length > 0) ||
-                  (source.config?.feeds && source.config.feeds.length > 0) ||
-                  (source.config?.usernames && source.config.usernames.length > 0) ||
-                  (source.config?.channels && source.config.channels.length > 0) ||
-                  (source.config?.urls && source.config.urls.length > 0);
-
-                if (!hasContent) {
-                  console.warn(`[Dashboard Cleanup] Removing empty ${source.type} source config with no actual sources`);
-                  return false;
-                }
-
-                // Validate Reddit sources don't contain @ symbols
-                if (source.type === 'reddit' && source.config?.subreddits) {
-                  const hasInvalidSub = source.config.subreddits.some((sub: string) => {
-                    const cleaned = sub.replace(/^r\//, '');
-                    return cleaned.startsWith('@');
-                  });
-                  if (hasInvalidSub) {
-                    console.warn(`Removing invalid Reddit source with @ symbol:`, source);
-                    return false;
-                  }
-                }
-
-                // Validate Twitter sources don't contain r/ prefix
-                if ((source.type === 'x' || source.type === 'twitter') && source.config?.usernames) {
-                  const hasInvalidUser = source.config.usernames.some((user: string) => {
-                    const cleaned = user.replace(/^@/, '');
-                    return cleaned.startsWith('r/');
-                  });
-                  if (hasInvalidUser) {
-                    console.warn(`Removing invalid Twitter source with r/ prefix:`, source);
-                    return false;
-                  }
-                }
-
-                return true;
-              });
-
-              // FIX 4: If we cleaned anything, save the cleaned config back to database
-              if (cleanedSources.length < originalCount) {
-                const removedCount = originalCount - cleanedSources.length;
-                console.log(`[Dashboard Cleanup] Cleaned ${removedCount} invalid source(s) from config. Saving cleaned config...`);
-
-                wsConfig.sources = cleanedSources;
-
-                // Save the cleaned config back to the database
-                try {
-                  await workspacesApi.updateConfig(ws.id, { sources: cleanedSources });
-                  console.log('[Dashboard Cleanup] Successfully saved cleaned config to database');
-                } catch (saveError) {
-                  console.error('[Dashboard Cleanup] Failed to save cleaned config:', saveError);
-                }
-              } else {
-                wsConfig.sources = cleanedSources;
-              }
-            }
-
-            setConfig(wsConfig);
-            setHasSources(wsConfig.sources?.some(s => s.enabled) || false);
-          } catch (error) {
-            console.error('Failed to fetch config:', error);
-            setHasSources(false);
-          }
-
-          // Fetch all independent data in parallel for better performance
-          let stats = null;
-          const [statsResult, subscriberResult, analyticsResult, newslettersResult] = await Promise.allSettled([
-            contentApi.getStats(ws.id),
-            subscribersApi.getStats(ws.id),
-            analyticsApi.getWorkspaceSummary(ws.id),
-            newslettersApi.list(ws.id),
-          ]);
-
-          // Handle content stats
-          if (statsResult.status === 'fulfilled') {
-            stats = statsResult.value;
-            setContentStats(stats);
-          } else {
-            console.error('Failed to fetch content stats:', statsResult.reason);
-          }
-
-          // Handle subscriber stats
-          if (subscriberResult.status === 'fulfilled') {
-            setSubscriberCount(subscriberResult.value.active_subscribers || 0);
-          } else {
-            console.error('Failed to fetch subscriber stats:', subscriberResult.reason);
-            setSubscriberCount(0);
-          }
-
-          // Handle analytics
-          if (analyticsResult.status === 'fulfilled') {
-            setAnalyticsData(analyticsResult.value);
-          } else {
-            console.error('Failed to fetch analytics:', analyticsResult.reason);
-            setAnalyticsData(null);
-          }
-
-          // Handle newsletters
-          if (newslettersResult.status === 'fulfilled') {
-            const newsletters = newslettersResult.value;
-            if (newsletters.length > 0) {
-              const latest = newsletters[0]; // Assuming sorted by date
-              setLatestNewsletter(latest);
-
-              // Determine draft status with freshness detection
-              if (latest.status === 'draft') {
-                // Check if draft is stale (new content exists after draft creation)
-
-                // ✅ COMPREHENSIVE DEBUG LOGGING (SAFE VERSION)
-                console.log('[Dashboard Freshness Debug] Starting freshness check:', {
-                  hasStats: !!stats,
-                  statsLatestScrape: stats?.latest_scrape,
-                  statsLatestScrapeType: typeof stats?.latest_scrape,
-                  statsItemsLast24h: stats?.items_last_24h,
-                  statsTotalItems: stats?.total_items,
-                  draftId: latest.id,
-                  draftStatus: latest.status,
-                  draftCreatedAt: latest.created_at,
-                  draftCreatedAtType: typeof latest.created_at,
-                  draftGeneratedAt: (latest as any).generated_at, // Check if this field exists
-                  draftGeneratedAtType: typeof (latest as any).generated_at,
-                });
-
-                if (stats && stats.latest_scrape) {
-                  // ✅ SAFE DATE PARSING with validation
-                  const draftCreatedRaw = latest.generated_at || latest.created_at;
-                  const latestScrapeRaw = stats.latest_scrape;
-
-                  if (!draftCreatedRaw) {
-                    console.warn('[Dashboard] ⚠️ Draft has no generated_at timestamp - cannot check freshness');
-                    setDraftStatus('ready');
-                  } else {
-                    const draftCreated = new Date(draftCreatedRaw);
-                    const latestContentScraped = new Date(latestScrapeRaw);
-
-                    // ✅ VALIDATE DATES before calling .toISOString()
-                    const draftCreatedValid = !isNaN(draftCreated.getTime());
-                    const latestScrapeValid = !isNaN(latestContentScraped.getTime());
-
-                    console.log('[Dashboard Freshness Debug] Timestamp comparison:', {
-                      draftCreatedAt: draftCreatedRaw,
-                      draftCreatedParsed: draftCreatedValid ? draftCreated.toISOString() : 'INVALID DATE',
-                      draftCreatedTimestamp: draftCreatedValid ? draftCreated.getTime() : 'INVALID',
-                      latestScrapeRaw: latestScrapeRaw,
-                      latestScrapeParsed: latestScrapeValid ? latestContentScraped.toISOString() : 'INVALID DATE',
-                      latestScrapeTimestamp: latestScrapeValid ? latestContentScraped.getTime() : 'INVALID',
-                      isLatestScrapeNewer: (draftCreatedValid && latestScrapeValid) ? latestContentScraped > draftCreated : 'CANNOT COMPARE',
-                      timeDifferenceMs: (draftCreatedValid && latestScrapeValid) ? latestContentScraped.getTime() - draftCreated.getTime() : 'CANNOT CALCULATE',
-                      timeDifferenceHours: (draftCreatedValid && latestScrapeValid) ? (latestContentScraped.getTime() - draftCreated.getTime()) / (1000 * 60 * 60) : 'CANNOT CALCULATE',
-                    });
-
-                    if (!draftCreatedValid) {
-                      console.error('[Dashboard] ❌ Invalid draft created_at date:', draftCreatedRaw);
-                      setDraftStatus('ready'); // Fallback to ready if date is invalid
-                    } else if (!latestScrapeValid) {
-                      console.error('[Dashboard] ❌ Invalid latest_scrape date:', latestScrapeRaw);
-                      setDraftStatus('ready'); // Fallback to ready if date is invalid
-                    } else if (latestContentScraped > draftCreated) {
-                      console.log('[Dashboard] ✅ Draft is STALE - marking as outdated');
-                      setDraftStatus('stale');
-                    } else {
-                      console.log('[Dashboard] ℹ️ Draft is FRESH - marking as ready');
-                      setDraftStatus('ready');
-                    }
-                  }
-                } else {
-                  console.log('[Dashboard] ⚠️ No stats or latest_scrape - defaulting to ready');
-                  setDraftStatus('ready');
-                }
-              } else if (latest.status === 'scheduled') {
-                setDraftStatus('scheduled');
-              } else {
-                setDraftStatus(wsConfig?.sources?.some(s => s.enabled) ? 'scheduled' : 'empty');
-              }
-            } else {
-              // newsletters array is empty
-              setDraftStatus(wsConfig?.sources?.some(s => s.enabled) ? 'scheduled' : 'empty');
-            }
-          } else {
-            // newslettersResult failed
-            console.error('Failed to fetch newsletters:', newslettersResult.reason);
-            setDraftStatus('empty');
-          }
-        }
-      } catch (error: any) {
-        console.error('Failed to fetch data:', error);
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to load dashboard data',
-          variant: 'destructive',
-        });
-      } finally {
-        setIsLoading(false);
-      }
+    if (latestNewsletter.status === 'scheduled') {
+      setDraftStatus('scheduled');
+      return;
     }
 
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isMounted, _hasHydrated]);
-
-  // Helper function to refetch only workspace config
-  const refetchConfig = async (workspaceId: string) => {
-    try {
-      const freshConfig = await workspacesApi.getConfig(workspaceId);
-      setConfig(freshConfig);
-      setHasSources(freshConfig.sources?.some(s => s.enabled) || false);
-      return freshConfig;
-    } catch (error) {
-      console.error('Failed to refetch config:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to reload sources',
-        variant: 'destructive',
-      });
-      throw error;
+    if (latestNewsletter.status !== 'draft') {
+      setDraftStatus(hasSources ? 'scheduled' : 'empty');
+      return;
     }
-  };
+
+    // Check if draft is stale
+    const draftCreatedRaw = latestNewsletter.generated_at || latestNewsletter.created_at;
+    const latestScrapeRaw = contentStats.latest_scrape;
+
+    if (!draftCreatedRaw || !latestScrapeRaw) {
+      setDraftStatus('ready');
+      return;
+    }
+
+    const draftCreated = new Date(draftCreatedRaw);
+    const latestContentScraped = new Date(latestScrapeRaw);
+
+    if (isNaN(draftCreated.getTime()) || isNaN(latestContentScraped.getTime())) {
+      setDraftStatus('ready');
+      return;
+    }
+
+    if (latestContentScraped > draftCreated) {
+      console.log('[Dashboard] Draft is STALE');
+      setDraftStatus('stale');
+    } else {
+      console.log('[Dashboard] Draft is FRESH');
+      setDraftStatus('ready');
+    }
+  }, [latestNewsletter, contentStats, hasSources]);
 
   if (!isMounted || !_hasHydrated || !isAuthenticated) {
     return null;
+  }
+
+  // Show skeleton while loading to prevent flash of intermediate content
+  if (isLoading) {
+    return <DashboardSkeleton />;
   }
 
   const handleLogout = () => {
@@ -404,8 +174,8 @@ export default function DashboardPage() {
 
         await workspacesApi.updateConfig(workspace.id, updatedConfig);
 
-        // Update local state instead of reloading
-        setConfig(updatedConfig);
+        // Invalidate cache to refetch updated config
+        invalidateConfig(workspace.id);
 
         toast({
           title: 'Source Paused',
@@ -439,8 +209,8 @@ export default function DashboardPage() {
 
         await workspacesApi.updateConfig(workspace.id, updatedConfig);
 
-        // Update local state instead of reloading
-        setConfig(updatedConfig);
+        // Invalidate cache to refetch updated config
+        invalidateConfig(workspace.id);
 
         toast({
           title: 'Source Resumed',
@@ -482,7 +252,6 @@ export default function DashboardPage() {
     if (!workspace) return;
 
     try {
-      setIsLoading(true);
       toast({
         title: 'Scraping Content',
         description: 'Fetching content from your sources...',
@@ -508,37 +277,31 @@ export default function DashboardPage() {
           description: `Successfully fetched ${result.data.total_items} items from ${Object.keys(result.data.items_by_source).length} sources`,
         });
 
-        // Refresh content stats to update item counts
-        if (workspace) {
-          try {
-            const stats = await contentApi.getStats(workspace.id);
-            setContentStats(stats);
+        // Invalidate cache to refetch fresh content stats and top stories
+        invalidateContentStats(workspace.id);
+        invalidateTopStories(workspace.id);
 
-            // Mark existing draft as stale if new content was scraped
-            if (latestNewsletter && latestNewsletter.status === 'draft' && result.data.total_items > 0) {
-              setDraftStatus('stale');
+        // Mark existing draft as stale if new content was scraped
+        if (latestNewsletter && latestNewsletter.status === 'draft' && result.data.total_items > 0) {
+          setDraftStatus('stale');
 
-              // Show actionable toast with regenerate button
-              toast({
-                title: '✓ New Content Available',
-                description: `Scraped ${result.data.total_items} new items. Regenerate your draft to include them.`,
-                action: (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setShowGenerationSettings(true);
-                    }}
-                    className="bg-white text-primary hover:bg-white/90"
-                  >
-                    Regenerate Now
-                  </Button>
-                ),
-                duration: 10000, // 10 seconds so user can click
-              });
-            }
-          } catch (error) {
-            console.error('Failed to refresh content stats:', error);
-          }
+          // Show actionable toast with regenerate button
+          toast({
+            title: '✓ New Content Available',
+            description: `Scraped ${result.data.total_items} new items. Regenerate your draft to include them.`,
+            action: (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setShowGenerationSettings(true);
+                }}
+                className="bg-white text-primary hover:bg-white/90"
+              >
+                Regenerate Now
+              </Button>
+            ),
+            duration: 10000, // 10 seconds so user can click
+          });
         }
       } else {
         throw new Error(result.error || 'Failed to scrape content');
@@ -550,8 +313,6 @@ export default function DashboardPage() {
         description: error.message || 'Failed to scrape content',
         variant: 'destructive',
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -591,7 +352,9 @@ export default function DashboardPage() {
       });
 
       clearInterval(stepInterval);
-      setLatestNewsletter(newsletter);
+
+      // Invalidate newsletters cache to refetch with new newsletter
+      invalidateNewsletters(workspace.id);
       setDraftStatus('ready');
 
       toast({
@@ -626,7 +389,7 @@ export default function DashboardPage() {
   };
 
   const handleEditArticle = async (item: any) => {
-    if (!latestNewsletter || !latestNewsletter.items) return;
+    if (!latestNewsletter || !latestNewsletter.items || !workspace) return;
 
     try {
       // Update the actual content item in database
@@ -636,14 +399,12 @@ export default function DashboardPage() {
         url: item.url,
       });
 
-      // Update local state to reflect changes immediately
-      const updatedItems = latestNewsletter.items.map(i =>
-        i.id === item.id ? item : i
-      );
+      // Invalidate newsletters cache to refetch with updated content
+      invalidateNewsletters(workspace.id);
 
-      setLatestNewsletter({
-        ...latestNewsletter,
-        items: updatedItems,
+      toast({
+        title: '✓ Article Updated',
+        description: 'Changes have been saved',
       });
     } catch (error: any) {
       toast({
@@ -655,7 +416,7 @@ export default function DashboardPage() {
   };
 
   const handleSaveDraft = async (data: { subject: string; items: any[] }) => {
-    if (!latestNewsletter) return;
+    if (!latestNewsletter || !workspace) return;
 
     try {
       // Only update subject line if it has changed (items are updated via handleEditArticle)
@@ -664,10 +425,8 @@ export default function DashboardPage() {
           subject_line: data.subject,
         });
 
-        setLatestNewsletter({
-          ...latestNewsletter,
-          subject_line: data.subject,
-        });
+        // Invalidate newsletters cache to refetch with updated subject
+        invalidateNewsletters(workspace.id);
       }
       // If subject hasn't changed, this is a no-op (silent success)
     } catch (error: any) {
@@ -679,7 +438,6 @@ export default function DashboardPage() {
     if (!workspace) return;
 
     try {
-      setIsLoading(true);
 
       // Get current config
       const currentConfig = config || {
@@ -811,7 +569,6 @@ export default function DashboardPage() {
 
       // If no new sources to add, just return
       if (actuallyNewSources.length === 0) {
-        setIsLoading(false);
         return;
       }
 
@@ -825,8 +582,9 @@ export default function DashboardPage() {
       };
 
       await workspacesApi.updateConfig(workspace.id, updatedConfig);
-      setConfig(updatedConfig);
-      setHasSources(true);
+
+      // Invalidate cache to refetch updated config
+      invalidateConfig(workspace.id);
 
       toast({
         title: '✓ Sources Added',
@@ -855,8 +613,6 @@ export default function DashboardPage() {
         description: error.message || 'Failed to add sources',
         variant: 'destructive',
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -905,6 +661,11 @@ export default function DashboardPage() {
                 : undefined
             }
           />
+
+          {/* Top Stories Carousel - Only show if has sources and content */}
+          {hasSources && contentStats && contentStats.items_last_24h > 0 && workspace?.id && (
+            <TopStories workspaceId={workspace.id} />
+          )}
 
           {hasSources && draftStatus === 'ready' && latestNewsletter && (
             <>
@@ -1096,11 +857,8 @@ export default function DashboardPage() {
 
                 setShowSendConfirmation(false);
 
-                // Update newsletter status
-                setLatestNewsletter({
-                  ...latestNewsletter,
-                  status: 'sent',
-                });
+                // Invalidate newsletters cache to refetch with updated status
+                invalidateNewsletters(workspace.id);
 
                 setDraftStatus('scheduled'); // Reset to scheduled for next draft
               } catch (error: any) {
@@ -1126,10 +884,8 @@ export default function DashboardPage() {
               title: 'Source Added',
               description: 'Your source has been added successfully',
             });
-            // Refetch only the config, not entire page
-            if (workspace) {
-              await refetchConfig(workspace.id);
-            }
+            // Invalidate config cache to refetch
+            invalidateConfig(workspace.id);
           }}
         />
       )}
@@ -1183,11 +939,8 @@ export default function DashboardPage() {
 
                 setShowScheduleSend(false);
 
-                // Update newsletter status
-                setLatestNewsletter({
-                  ...latestNewsletter,
-                  status: 'scheduled',
-                });
+                // Invalidate newsletters cache to refetch with updated status
+                invalidateNewsletters(workspace.id);
 
                 setDraftStatus('scheduled');
               } catch (error: any) {

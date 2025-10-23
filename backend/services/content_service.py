@@ -768,6 +768,124 @@ class ContentService:
         print(f"[ContentService]   - Updated title: {updated_item.get('title', '')[:50]}...")
         return updated_item
 
+    async def get_top_stories(
+        self,
+        user_id: str,
+        workspace_id: str,
+        limit: int = 5,
+        hours: int = 24
+    ) -> Dict[str, Any]:
+        """
+        Get top stories for carousel display.
+
+        Fetches highest-scoring content from recent hours.
+        Sorts by score DESC, then by created_at DESC.
+        Optimized for carousel (minimal data).
+
+        Args:
+            user_id: User ID (for auth check)
+            workspace_id: Workspace ID
+            limit: Number of stories to return (default 5, max 10)
+            hours: Time window in hours (default 24, max 168)
+
+        Returns:
+            Dict with top stories
+        """
+        # Verify user has access
+        workspace = self.supabase.get_workspace(workspace_id)
+        if not workspace:
+            raise ValueError("Workspace not found")
+
+        # Cap limits to prevent abuse
+        limit = min(limit, 10)
+        hours = min(hours, 168)  # Max 1 week
+
+        # Calculate cutoff time
+        from datetime import timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+        # Load content items within time window
+        all_items = self.supabase.load_content_items(
+            workspace_id=workspace_id,
+            days=max(1, hours // 24),  # Convert hours to days (minimum 1 day)
+            limit=1000  # Large limit for filtering
+        )
+
+        # Filter by scraped_at within time window and sort by score
+        filtered_items = [
+            item for item in all_items
+            if item.scraped_at and item.scraped_at >= cutoff
+        ]
+
+        # Sort by score DESC, then by created_at DESC
+        sorted_items = sorted(
+            filtered_items,
+            key=lambda x: (x.score or 0, x.created_at or datetime.min.replace(tzinfo=timezone.utc)),
+            reverse=True
+        )[:limit]
+
+        # Convert to response format with time_ago
+        stories = []
+        for item in sorted_items:
+            # Calculate human-readable time ago
+            time_ago = self._calculate_time_ago(item.scraped_at)
+
+            stories.append({
+                'id': item.metadata.get('id'),  # ID is stored in metadata by database layer
+                'title': item.title,
+                'source': item.source,
+                'source_url': item.source_url,
+                'image_url': item.image_url,
+                'score': item.score or 0,
+                'created_at': item.created_at.isoformat() if item.created_at else None,
+                'scraped_at': item.scraped_at.isoformat() if item.scraped_at else None,
+                'time_ago': time_ago
+            })
+
+        return {
+            'workspace_id': workspace_id,
+            'stories': stories,
+            'count': len(stories)
+        }
+
+    def _calculate_time_ago(self, dt: Optional[datetime]) -> str:
+        """
+        Calculate human-readable time ago string.
+
+        Args:
+            dt: Datetime to calculate from
+
+        Returns:
+            Human-readable string like "2 hours ago", "3 days ago"
+        """
+        if not dt:
+            return "unknown"
+
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+
+        # Ensure dt is timezone-aware
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        diff = now - dt
+        seconds = diff.total_seconds()
+
+        if seconds < 60:
+            return "just now"
+        elif seconds < 3600:
+            minutes = int(seconds / 60)
+            return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+        elif seconds < 86400:
+            hours = int(seconds / 3600)
+            return f"{hours} hour{'s' if hours != 1 else ''} ago"
+        elif seconds < 604800:
+            days = int(seconds / 86400)
+            return f"{days} day{'s' if days != 1 else ''} ago"
+        else:
+            weeks = int(seconds / 604800)
+            return f"{weeks} week{'s' if weeks != 1 else ''} ago"
+
 
 # Global service instance
 content_service = ContentService()

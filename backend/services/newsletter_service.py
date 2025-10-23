@@ -238,7 +238,8 @@ class NewsletterService:
         claude_result = claude_generator.generate_newsletter_content(
             items=items_for_claude,
             title=title,
-            tone=tone
+            tone=tone,
+            style_profile=style_profile  # Pass the fetched style profile
         )
 
         # Claude now returns COMPLETE HTML with images and styling
@@ -295,6 +296,9 @@ class NewsletterService:
                 'trend_boosted_items': len([item for item in content_items_dicts if item.get('trend_boosted', False)]),
                 'style_profile_applied': style_profile is not None,
                 'style_tone': style_profile.tone if style_profile else None,
+                'style_formality': style_profile.formality_level if style_profile else None,
+                'style_trained_samples': style_profile.trained_on_count if style_profile else 0,
+                'style_vocabulary_level': style_profile.vocabulary_level if style_profile else None,
                 'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
             }
         )
@@ -384,6 +388,9 @@ class NewsletterService:
                 'trend_boosted_items': len([item for item in content_items_dicts if item.get('trend_boosted', False)]),
                 'style_profile_applied': style_profile is not None,
                 'style_tone': style_profile.tone if style_profile else None,
+                'style_formality': style_profile.formality_level if style_profile else None,
+                'style_trained_samples': style_profile.trained_on_count if style_profile else 0,
+                'style_vocabulary_level': style_profile.vocabulary_level if style_profile else None,
                 'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
             }
         )

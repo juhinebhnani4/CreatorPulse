@@ -160,6 +160,65 @@ async def get_workspace_content_stats(
         )
 
 
+@router.get("/workspaces/{workspace_id}/top", response_model=APIResponse)
+async def get_top_stories(
+    workspace_id: str,
+    limit: int = 5,
+    hours: int = 24,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get top stories for dashboard carousel.
+
+    Fetches highest-scoring content items from recent hours.
+    Optimized for carousel display (minimal data).
+
+    Requires: Authorization header with Bearer token
+
+    Args:
+        workspace_id: Workspace ID
+        limit: Number of stories (default 5, max 10)
+        hours: Time window in hours (default 24, max 168)
+        user_id: User ID from JWT token
+
+    Returns:
+        APIResponse with top stories
+    """
+    try:
+        # Validate limits
+        if limit < 1 or limit > 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Limit must be between 1 and 10"
+            )
+
+        if hours < 1 or hours > 168:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Hours must be between 1 and 168 (1 week)"
+            )
+
+        result = await content_service.get_top_stories(
+            user_id=user_id,
+            workspace_id=workspace_id,
+            limit=limit,
+            hours=hours
+        )
+
+        return APIResponse.success_response(result)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
 @router.get("/workspaces/{workspace_id}/sources/{source}", response_model=APIResponse)
 async def list_content_by_source(
     workspace_id: str,

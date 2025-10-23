@@ -74,3 +74,23 @@ class ScrapeJobResponse(BaseModel):
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
     error: Optional[str]
+
+
+class TopStoryItem(BaseModel):
+    """Single top story item (optimized for carousel display)."""
+    id: str
+    title: str
+    source: str  # reddit, rss, youtube, x, blog
+    source_url: str
+    image_url: Optional[str] = None
+    score: int = 0
+    created_at: datetime
+    scraped_at: datetime
+    time_ago: str  # Human-readable like "2 days ago"
+
+
+class TopStoriesResponse(BaseModel):
+    """Top stories response."""
+    workspace_id: str
+    stories: List[TopStoryItem]
+    count: int

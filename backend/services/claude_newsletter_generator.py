@@ -14,6 +14,7 @@ except ImportError:
     Anthropic = None
 
 from backend.settings import Settings
+from backend.models.style_profile import StyleProfileResponse
 
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,8 @@ class ClaudeNewsletterGenerator:
         self,
         items: List[Dict[str, Any]],
         title: Optional[str] = None,
-        tone: str = "professional"
+        tone: str = "professional",
+        style_profile: Optional[StyleProfileResponse] = None
     ) -> Dict[str, str]:
         """
         Generate newsletter content using Claude.
@@ -55,12 +57,13 @@ class ClaudeNewsletterGenerator:
             items: List of content items (as dicts)
             title: Optional newsletter title
             tone: Writing tone (professional, casual, technical, friendly)
+            style_profile: Optional trained style profile for personalized writing
 
         Returns:
             Dict with generated content (title, intro, content, footer)
         """
         # Build prompt
-        prompt = self._build_prompt(items, title, tone)
+        prompt = self._build_prompt(items, title, tone, style_profile)
 
         try:
             # Call Claude API
@@ -97,7 +100,8 @@ class ClaudeNewsletterGenerator:
         self,
         items: List[Dict[str, Any]],
         title: Optional[str],
-        tone: str
+        tone: str,
+        style_profile: Optional[StyleProfileResponse] = None
     ) -> str:
         """Build the prompt for Claude."""
 
@@ -140,15 +144,20 @@ class ClaudeNewsletterGenerator:
 
         newsletter_title = title or f"AI Newsletter - {datetime.now().strftime('%B %d, %Y')}"
 
+        # Build style instructions if profile exists
+        style_instructions = self._build_style_instructions(style_profile)
+
         prompt = f"""You are an expert newsletter writer creating a high-quality AI briefing with professional visual design.
 
 {images_section}
 
 CONTENT TO ANALYZE ({len(items)} items):
 {items_text}
+{style_instructions}
 
 YOUR TASK:
-Create a complete HTML newsletter that is visually appealing and insightful. Analyze all content items, identify 3-5 major themes, and synthesize them into narrative sections.
+Create a complete HTML newsletter that matches the writing style above (if provided).
+Analyze all content items, identify 3-5 major themes, and synthesize them into narrative sections.
 
 IMPORTANT - HTML OUTPUT FORMAT:
 Generate ONLY the complete HTML newsletter. No JSON, no code blocks, just pure HTML starting with the structure below.
@@ -213,6 +222,56 @@ CRITICAL INSTRUCTIONS:
 OUTPUT FORMAT: Start your response with <div style="font-family... and end with </div>. Nothing else."""
 
         return prompt
+
+    def _build_style_instructions(self, style_profile: Optional[StyleProfileResponse]) -> str:
+        """
+        Build style-specific instructions from trained profile.
+
+        Args:
+            style_profile: Optional style profile to convert to instructions
+
+        Returns:
+            Formatted style instructions string, or empty if no profile
+        """
+        if not style_profile:
+            return ""
+
+        instructions = ["\n\nWRITING STYLE REQUIREMENTS (trained from your past newsletters):"]
+
+        # Core voice characteristics
+        instructions.append(f"- Tone: {style_profile.tone} with {style_profile.formality_level:.0%} formality")
+        instructions.append(f"- Vocabulary level: {style_profile.vocabulary_level}")
+
+        # Sentence structure
+        instructions.append(f"- Average sentence length: {style_profile.avg_sentence_length} words (vary by ~{style_profile.sentence_length_variety} words)")
+
+        if style_profile.question_frequency > 0:
+            instructions.append(f"- Include questions about {style_profile.question_frequency:.0%} of the time")
+
+        # Characteristic phrases
+        if style_profile.favorite_phrases and len(style_profile.favorite_phrases) > 0:
+            phrases = ", ".join(f'"{p}"' for p in style_profile.favorite_phrases[:5])
+            instructions.append(f"- Naturally incorporate these phrases: {phrases}")
+
+        # Words to avoid
+        if style_profile.avoided_words and len(style_profile.avoided_words) > 0:
+            words = ", ".join(style_profile.avoided_words[:5])
+            instructions.append(f"- Avoid using: {words}")
+
+        # Intro style
+        instructions.append(f"- Opening style: {style_profile.typical_intro_style}")
+
+        # Emoji usage
+        if style_profile.uses_emojis:
+            instructions.append(f"- Include emojis sparingly (about {style_profile.emoji_frequency:.1%} of content)")
+        else:
+            instructions.append("- Do not use emojis")
+
+        # Example intro (few-shot learning)
+        if style_profile.example_intros and len(style_profile.example_intros) > 0:
+            instructions.append(f"\nExample of your opening style: \"{style_profile.example_intros[0]}\"")
+
+        return "\n".join(instructions)
 
     def _parse_response(self, response_text: str) -> Dict[str, str]:
         """Parse Claude's HTML response and extract components."""
