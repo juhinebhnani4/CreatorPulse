@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,11 +11,16 @@ import { workspacesApi } from '@/lib/api/workspaces';
 import { Workspace } from '@/types/workspace';
 import { Plus, Trash2, Edit2, Check, X, Building2 } from 'lucide-react';
 
-export function WorkspaceSettings() {
+interface WorkspaceSettingsProps {
+  highlightCreate?: boolean;
+}
+
+export function WorkspaceSettings({ highlightCreate = false }: WorkspaceSettingsProps) {
   const { toast } = useToast();
   const { currentWorkspace, setCurrentWorkspace } = useWorkspaceStore();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const createSectionRef = useRef<HTMLDivElement>(null);
 
   // Edit workspace state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -30,6 +35,22 @@ export function WorkspaceSettings() {
   useEffect(() => {
     loadWorkspaces();
   }, []);
+
+  // Auto-scroll and highlight when navigating from dropdown
+  useEffect(() => {
+    if (highlightCreate && createSectionRef.current) {
+      // Auto-open create form
+      setShowCreateForm(true);
+
+      // Scroll to create section with smooth animation
+      setTimeout(() => {
+        createSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }, 100);
+    }
+  }, [highlightCreate]);
 
   const loadWorkspaces = async () => {
     try {
@@ -231,14 +252,14 @@ export function WorkspaceSettings() {
       )}
 
       {/* Create New Workspace */}
-      <div>
+      <div ref={createSectionRef} className={highlightCreate ? 'animate-highlight-pulse' : ''}>
         <Button onClick={() => setShowCreateForm(!showCreateForm)} variant="default">
           <Plus className="h-4 w-4 mr-2" />
           Create New Workspace
         </Button>
 
         {showCreateForm && (
-          <Card className="mt-4">
+          <Card className={`mt-4 ${highlightCreate ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
             <CardContent className="pt-6 space-y-3">
               <div>
                 <label className="text-sm font-medium mb-1 block">Workspace Name *</label>

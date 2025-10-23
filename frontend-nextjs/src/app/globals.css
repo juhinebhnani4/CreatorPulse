@@ -185,4 +185,19 @@
   .animate-celebration {
     animation: celebration 0.6s ease-in-out;
   }
+
+  @keyframes highlight-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.95;
+      transform: scale(1.02);
+    }
+  }
+
+  .animate-highlight-pulse {
+    animation: highlight-pulse 1.5s ease-in-out 2;
+  }
 }

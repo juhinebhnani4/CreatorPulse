@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ChevronDown } from 'lucide-react';
 import { SourcesSettings } from '@/components/settings/sources-settings';
 import { ScheduleSettings } from '@/components/settings/schedule-settings';
@@ -18,7 +19,25 @@ import { AppHeader } from '@/components/layout/app-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function SettingsPage() {
+  const searchParams = useSearchParams();
   const [activeSection, setActiveSection] = useState('sources');
+  const [highlightAction, setHighlightAction] = useState<string | null>(null);
+
+  // Check URL parameters for navigation from dropdown
+  useEffect(() => {
+    const section = searchParams.get('section');
+    const action = searchParams.get('action');
+
+    if (section) {
+      setActiveSection(section);
+    }
+
+    if (action === 'create') {
+      setHighlightAction('create');
+      // Remove highlight after animation
+      setTimeout(() => setHighlightAction(null), 3000);
+    }
+  }, [searchParams]);
 
   // Setup progress tracking
   const setupSteps = [
@@ -70,7 +89,7 @@ export default function SettingsPage() {
       id: 'workspace',
       title: '🏢 Workspace',
       icon: '🏢',
-      component: <WorkspaceSettings />,
+      component: <WorkspaceSettings highlightCreate={highlightAction === 'create'} />,
       status: 'configured' as const,
       statusText: 'My Workspace',
       description: 'Manage workspace settings and team members',

@@ -146,7 +146,7 @@ export function AppHeader() {
                   ))}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={() => router.push('/app/settings')}
+                    onClick={() => router.push('/app/settings?section=workspace&action=create')}
                     className="flex items-center gap-2 cursor-pointer text-primary font-medium"
                   >
                     <Plus className="h-4 w-4" />
