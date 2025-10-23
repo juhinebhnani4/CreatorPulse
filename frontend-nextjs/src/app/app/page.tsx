@@ -218,36 +218,42 @@ export default function DashboardPage() {
             setHasSources(false);
           }
 
-          // Fetch content stats
+          // Fetch all independent data in parallel for better performance
           let stats = null;
-          try {
-            stats = await contentApi.getStats(ws.id);
+          const [statsResult, subscriberResult, analyticsResult, newslettersResult] = await Promise.allSettled([
+            contentApi.getStats(ws.id),
+            subscribersApi.getStats(ws.id),
+            analyticsApi.getWorkspaceSummary(ws.id),
+            newslettersApi.list(ws.id),
+          ]);
+
+          // Handle content stats
+          if (statsResult.status === 'fulfilled') {
+            stats = statsResult.value;
             setContentStats(stats);
-          } catch (error) {
-            console.error('Failed to fetch content stats:', error);
+          } else {
+            console.error('Failed to fetch content stats:', statsResult.reason);
           }
 
-          // Fetch subscriber count
-          try {
-            const subscriberStats = await subscribersApi.getStats(ws.id);
-            setSubscriberCount(subscriberStats.active_subscribers || 0);
-          } catch (error) {
-            console.error('Failed to fetch subscriber stats:', error);
-            setSubscriberCount(0); // Graceful fallback to 0
+          // Handle subscriber stats
+          if (subscriberResult.status === 'fulfilled') {
+            setSubscriberCount(subscriberResult.value.active_subscribers || 0);
+          } else {
+            console.error('Failed to fetch subscriber stats:', subscriberResult.reason);
+            setSubscriberCount(0);
           }
 
-          // Fetch analytics data
-          try {
-            const analytics = await analyticsApi.getWorkspaceSummary(ws.id);
-            setAnalyticsData(analytics);
-          } catch (error) {
-            console.error('Failed to fetch analytics:', error);
-            setAnalyticsData(null); // Graceful fallback
+          // Handle analytics
+          if (analyticsResult.status === 'fulfilled') {
+            setAnalyticsData(analyticsResult.value);
+          } else {
+            console.error('Failed to fetch analytics:', analyticsResult.reason);
+            setAnalyticsData(null);
           }
 
-          // Fetch latest newsletter
-          try {
-            const newsletters = await newslettersApi.list(ws.id);
+          // Handle newsletters
+          if (newslettersResult.status === 'fulfilled') {
+            const newsletters = newslettersResult.value;
             if (newsletters.length > 0) {
               const latest = newsletters[0]; // Assuming sorted by date
               setLatestNewsletter(latest);
@@ -325,10 +331,15 @@ export default function DashboardPage() {
             } else {
               setDraftStatus(wsConfig?.sources?.some(s => s.enabled) ? 'scheduled' : 'empty');
             }
-          } catch (error) {
-            console.error('Failed to fetch newsletters:', error);
-            setDraftStatus('empty');
+          } else {
+            // newsletters array is empty
+            setDraftStatus(wsConfig?.sources?.some(s => s.enabled) ? 'scheduled' : 'empty');
           }
+        } else {
+          // newslettersResult failed
+          console.error('Failed to fetch newsletters:', newslettersResult.reason);
+          setDraftStatus('empty');
+        }
         }
       } catch (error: any) {
         console.error('Failed to fetch data:', error);
@@ -345,6 +356,24 @@ export default function DashboardPage() {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isMounted, _hasHydrated]);
+
+  // Helper function to refetch only workspace config
+  const refetchConfig = async (workspaceId: string) => {
+    try {
+      const freshConfig = await workspacesApi.getConfig(workspaceId);
+      setConfig(freshConfig);
+      setHasSources(freshConfig.sources?.some(s => s.enabled) || false);
+      return freshConfig;
+    } catch (error) {
+      console.error('Failed to refetch config:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to reload sources',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
 
   if (!isMounted || !_hasHydrated || !isAuthenticated) {
     return null;
@@ -1095,14 +1124,16 @@ export default function DashboardPage() {
           open={showAddSource}
           onClose={() => setShowAddSource(false)}
           workspaceId={workspace.id}
-          onSuccess={() => {
+          onSuccess={async () => {
             setShowAddSource(false);
             toast({
               title: 'Source Added',
               description: 'Your source has been added successfully',
             });
-            // Refresh data
-            window.location.reload();
+            // Refetch only the config, not entire page
+            if (workspace) {
+              await refetchConfig(workspace.id);
+            }
           }}
         />
       )}
