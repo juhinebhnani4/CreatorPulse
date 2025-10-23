@@ -329,18 +329,14 @@ export default function DashboardPage() {
                 setDraftStatus(wsConfig?.sources?.some(s => s.enabled) ? 'scheduled' : 'empty');
               }
             } else {
+              // newsletters array is empty
               setDraftStatus(wsConfig?.sources?.some(s => s.enabled) ? 'scheduled' : 'empty');
             }
           } else {
-            // newsletters array is empty
-            setDraftStatus(wsConfig?.sources?.some(s => s.enabled) ? 'scheduled' : 'empty');
+            // newslettersResult failed
+            console.error('Failed to fetch newsletters:', newslettersResult.reason);
+            setDraftStatus('empty');
           }
-        } else {
-          // newslettersResult failed
-          console.error('Failed to fetch newsletters:', newslettersResult.reason);
-          setDraftStatus('empty');
-        }
-        }
       } catch (error: any) {
         console.error('Failed to fetch data:', error);
         toast({
