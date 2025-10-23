@@ -37,8 +37,8 @@ def get_trend_service() -> TrendDetectionService:
 @router.post("/detect", response_model=APIResponse)
 @limiter.limit(RateLimits.TREND_DETECTION)
 async def detect_trends(
-    http_request: Request,
-    request: DetectTrendsRequest,
+    request: Request,
+    detect_request: DetectTrendsRequest,
     current_user: str = Depends(get_current_user),
     trend_service: TrendDetectionService = Depends(get_trend_service)
 ):
@@ -78,15 +78,15 @@ async def detect_trends(
     """
     try:
         # Verify workspace access
-        await verify_workspace_access(request.workspace_id, current_user)
+        await verify_workspace_access(detect_request.workspace_id, current_user)
 
         # Detect trends
         trends, analysis_summary = await trend_service.detect_trends(
-            request.workspace_id,
-            days_back=request.days_back,
-            max_trends=request.max_trends,
-            min_confidence=request.min_confidence,
-            sources=request.sources
+            detect_request.workspace_id,
+            days_back=detect_request.days_back,
+            max_trends=detect_request.max_trends,
+            min_confidence=detect_request.min_confidence,
+            sources=detect_request.sources
         )
 
         response = DetectTrendsResponse(

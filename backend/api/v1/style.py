@@ -40,8 +40,8 @@ def get_style_service() -> StyleAnalysisService:
 @router.post("/train", response_model=APIResponse)
 @limiter.limit(RateLimits.STYLE_TRAINING)
 async def train_style_profile(
-    http_request: Request,
-    request: TrainStyleRequest,
+    request: Request,
+    train_request: TrainStyleRequest,
     current_user: str = Depends(get_current_user),
     style_service: StyleAnalysisService = Depends(get_style_service)
 ):
@@ -68,24 +68,24 @@ async def train_style_profile(
     """
     try:
         # Verify workspace access
-        await verify_workspace_access(request.workspace_id, current_user)
+        await verify_workspace_access(train_request.workspace_id, current_user)
 
         # Analyze samples and create profile
         profile_data, analysis_summary = style_service.analyze_samples(
-            request.samples,
-            request.workspace_id
+            train_request.samples,
+            train_request.workspace_id
         )
 
         # Create or update profile
         profile = await style_service.create_or_update_profile(
-            request.workspace_id,
+            train_request.workspace_id,
             profile_data,
-            retrain=request.retrain
+            retrain=train_request.retrain
         )
 
         response = TrainStyleResponse(
             success=True,
-            message=f"Style profile trained successfully on {len(request.samples)} samples",
+            message=f"Style profile trained successfully on {len(train_request.samples)} samples",
             profile=profile,
             analysis_summary=analysis_summary
         )
