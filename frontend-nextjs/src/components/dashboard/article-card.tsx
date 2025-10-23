@@ -15,6 +15,7 @@ interface ContentItem {
   url: string;
   source: string;
   publishedAt?: Date;
+  imageUrl?: string;
 }
 
 interface ArticleCardProps {
@@ -111,10 +112,38 @@ export function ArticleCard({ item, editable = false, onEdit }: ArticleCardProps
     );
   }
 
+  // Helper function to get source icon
+  const getSourceIcon = (source: string) => {
+    const sourceLower = source.toLowerCase();
+    if (sourceLower.includes('reddit')) return '📱';
+    if (sourceLower.includes('youtube')) return '🎥';
+    if (sourceLower.includes('x') || sourceLower.includes('twitter')) return '𝕏';
+    if (sourceLower.includes('rss')) return '📰';
+    if (sourceLower.includes('blog')) return '📝';
+    return '📄';
+  };
+
   return (
     <Card className="group hover:bg-accent/50 transition-colors">
       <CardContent className="pt-6">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          {/* Image thumbnail - only show when available */}
+          {item.imageUrl && (
+            <div className="flex-shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-muted">
+              <img
+                src={item.imageUrl}
+                alt={item.title}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  // Hide entire container if image fails to load
+                  const container = e.currentTarget.parentElement;
+                  if (container) container.style.display = 'none';
+                }}
+              />
+            </div>
+          )}
+
+          {/* Content - takes full width when no image */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-2 mb-2">
               <h3 className="font-semibold text-base leading-tight flex-1">
@@ -131,11 +160,12 @@ export function ArticleCard({ item, editable = false, onEdit }: ArticleCardProps
                 </Button>
               )}
             </div>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+            <p className="text-sm text-muted-foreground leading-relaxed mb-3 line-clamp-2">
               {item.summary}
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="secondary" className="text-xs">
+                <span className="mr-1">{getSourceIcon(item.source)}</span>
                 {item.source}
               </Badge>
               {item.publishedAt && (
