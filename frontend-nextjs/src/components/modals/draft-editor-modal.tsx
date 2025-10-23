@@ -66,9 +66,9 @@ export function DraftEditorModal({
 
   // State for inline HTML editing
   const [editingSection, setEditingSection] = useState<{
-    element: HTMLElement;
+    tagName: string;
+    index: number;
     originalText: string;
-    xpath: string;
     itemId: string | null;
     type: 'title' | 'content';
   } | null>(null);
@@ -198,18 +198,15 @@ export function DraftEditorModal({
       : 'text-yellow-600';
 
   // Helper functions for inline HTML editing
-  const getXPath = (element: HTMLElement): string => {
-    if (!element.parentElement) return '';
-    const index = Array.from(element.parentElement.children).indexOf(element);
-    return `${element.tagName}[${index}]`;
-  };
+  const getElementSelector = (element: HTMLElement): { tagName: string; index: number; text: string } => {
+    if (!previewRef.current) return { tagName: '', index: 0, text: '' };
 
-  const getElementByXPath = (xpath: string): HTMLElement | null => {
-    if (!previewRef.current) return null;
-    const [tag, indexStr] = xpath.split('[');
-    const index = parseInt(indexStr?.replace(']', '') || '0');
-    const elements = previewRef.current.querySelectorAll(tag);
-    return (elements[index] as HTMLElement) || null;
+    const tagName = element.tagName.toLowerCase();
+    const allOfType = Array.from(previewRef.current.querySelectorAll(tagName));
+    const index = allOfType.indexOf(element);
+    const text = element.textContent || '';
+
+    return { tagName, index, text };
   };
 
   const createFeedbackButton = (
@@ -240,28 +237,21 @@ export function DraftEditorModal({
 
     try {
       const originalText = editingSection.originalText;
+      const { tagName, index } = editingSection;
 
       // Parse cleanHtml (NOT live DOM) to avoid capturing dynamic UI
       const parser = new DOMParser();
       const doc = parser.parseFromString(cleanHtml, 'text/html');
 
-      // Find element using xpath
-      const xpath = editingSection.xpath;
-      const tagMatch = xpath.match(/^(\w+)\[(\d+)\]$/);
-      if (!tagMatch) {
-        throw new Error('Invalid xpath format');
-      }
+      // Find all elements of this tag type
+      const elements = doc.body.querySelectorAll(tagName);
 
-      const [_, tagName, indexStr] = tagMatch;
-      const targetIndex = parseInt(indexStr, 10);
-      const elements = doc.querySelectorAll(tagName);
-
-      if (!elements[targetIndex]) {
-        throw new Error(`Element not found at ${xpath}`);
+      if (!elements[index]) {
+        throw new Error(`Element not found: ${tagName}[${index}]`);
       }
 
       // Update text in parsed document
-      elements[targetIndex].textContent = newText;
+      elements[index].textContent = newText;
 
       // Serialize back to clean HTML string
       const updatedCleanHtml = doc.body.innerHTML;
@@ -383,10 +373,13 @@ export function DraftEditorModal({
         const sectionIndex = Math.floor(index / 2); // Approximate mapping
         const itemId = items[sectionIndex]?.id || null;
 
+        // Get element selector
+        const selector = getElementSelector(htmlEl);
+
         setEditingSection({
-          element: htmlEl,
+          tagName: selector.tagName,
+          index: selector.index,
           originalText: htmlEl.textContent || '',
-          xpath: getXPath(htmlEl),
           itemId: itemId,
           type: htmlEl.tagName === 'H2' ? 'title' : 'content',
         });
