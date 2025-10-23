@@ -75,7 +75,9 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false, existing
     const trimmed = line.trim();
     if (!trimmed) return null;
 
-    // Reddit: r/name or /r/name
+    // ========================================
+    // STEP 1: Reddit (r/name pattern)
+    // ========================================
     if (/^r\/\w+$/i.test(trimmed) || /^\/r\/\w+$/i.test(trimmed)) {
       const subreddit = trimmed.replace(/^\//, '');
       return {
@@ -87,30 +89,9 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false, existing
       };
     }
 
-    // RSS Feed: http(s)://... with /feed or /rss in path
-    if (/^https?:\/\/.+/i.test(trimmed)) {
-      // Ignore non-content URLs
-      if (shouldIgnoreUrl(trimmed)) {
-        return null;
-      }
-
-      // Check if it's explicitly an RSS feed (has /feed, /rss, .xml, .rss in URL)
-      const isRssFeed = /\/(feed|rss|atom)|\.xml|\.rss/i.test(trimmed);
-
-      if (isRssFeed) {
-        const cleanDomain = cleanRssUrl(trimmed);
-        return {
-          type: 'rss',
-          value: trimmed,
-          icon: '📰',
-          displayName: cleanDomain,
-          description: 'RSS feed',
-        };
-      }
-      // If not explicitly RSS, continue to check for other types
-    }
-
-    // Twitter: @username or #hashtag
+    // ========================================
+    // STEP 2: Twitter (@username, #hashtag)
+    // ========================================
     if (/^@\w+$/i.test(trimmed)) {
       return {
         type: 'twitter',
@@ -131,7 +112,9 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false, existing
       };
     }
 
-    // YouTube: UC channel IDs (24 characters starting with UC)
+    // ========================================
+    // STEP 3: YouTube Channel IDs (standalone UC...)
+    // ========================================
     if (/^UC[\w-]{22}$/i.test(trimmed)) {
       return {
         type: 'youtube',
@@ -142,18 +125,29 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false, existing
       };
     }
 
-    // YouTube: youtube.com URLs
-    if (/youtube\.com\/(channel|c|user)\//i.test(trimmed)) {
+    // ========================================
+    // STEP 4: YouTube URLs (DOMAIN-BASED) ⭐ FIXED
+    // ========================================
+    if (/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(trimmed)) {
       try {
         const url = new URL(trimmed);
-        const pathMatch = url.pathname.match(/\/(channel|c|user)\/([^/?]+)/);
+
+        // Match patterns:
+        // - youtube.com/@username
+        // - youtube.com/c/channelname
+        // - youtube.com/channel/UC...
+        // - youtube.com/user/username
+        const pathMatch = url.pathname.match(/^\/(@[\w-]+)|(c\/[\w-]+)|(channel\/UC[\w-]{22})|(user\/[\w-]+)/i);
+
         if (pathMatch) {
-          const channelId = pathMatch[2];
+          // Extract the identifier (remove leading slash or prefix)
+          const identifier = (pathMatch[1] || pathMatch[2] || pathMatch[3] || pathMatch[4]).replace(/^\//, '');
+
           return {
             type: 'youtube',
-            value: channelId,
+            value: trimmed,  // Store full URL for backend to parse
             icon: '🎥',
-            displayName: channelId,
+            displayName: identifier,
             description: 'YouTube channel',
           };
         }
@@ -162,21 +156,102 @@ export function UnifiedSourceSetup({ onSourcesAdded, isLoading = false, existing
       }
     }
 
-    // Generic URL fallback - try to detect as RSS feed
+    // ========================================
+    // STEP 5: EXPLICIT RSS Feeds ⭐ MOVED UP (before blog detection)
+    // ========================================
     if (/^https?:\/\/.+/i.test(trimmed)) {
-      const cleanDomain = cleanRssUrl(trimmed);
+      // Ignore non-content URLs
+      if (shouldIgnoreUrl(trimmed)) {
+        return null;
+      }
 
-      // Auto-append /feed suffix for common blog platforms
-      // Most blogs (WordPress, Ghost, Medium, etc.) have RSS at /feed
-      const feedUrl = trimmed.endsWith('/') ? `${trimmed}feed` : `${trimmed}/feed`;
+      // Check for EXPLICIT RSS indicators in URL
+      const hasExplicitRss = /\/(feed|rss|atom)|\.xml|\.rss/i.test(trimmed);
 
-      return {
-        type: 'rss',
-        value: feedUrl,
-        icon: '📰',
-        displayName: cleanDomain,
-        description: 'RSS feed (auto-detected)',
-      };
+      if (hasExplicitRss) {
+        const cleanDomain = cleanRssUrl(trimmed);
+        return {
+          type: 'rss',
+          value: trimmed,  // Use original URL (don't modify)
+          icon: '📰',
+          displayName: cleanDomain,
+          description: 'RSS feed',
+        };
+      }
+    }
+
+    // ========================================
+    // STEP 6: Blog URLs (subdomain/path-based) ⭐ NEW
+    // ========================================
+    if (/^https?:\/\/.+/i.test(trimmed)) {
+      try {
+        const url = new URL(trimmed);
+
+        // Check for blog indicators:
+        // 1. Subdomain: blog.example.com, blogs.example.com
+        // 2. Path: /blog/, /blog, /news/
+        // 3. Domain: .blog TLD
+
+        const isBlogSubdomain = /^blogs?\./.test(url.hostname);
+        const hasBlogPath = /\/(blog|news)(\/|$)/i.test(url.pathname);
+        const isBlogDomain = url.hostname.endsWith('.blog');
+
+        if (isBlogSubdomain || hasBlogPath || isBlogDomain) {
+          const cleanDomain = cleanRssUrl(trimmed);
+          return {
+            type: 'blog',
+            value: trimmed,  // Use original URL (don't append /feed)
+            icon: '📝',
+            displayName: cleanDomain,
+            description: 'Blog URL',
+          };
+        }
+      } catch {
+        // Invalid URL, continue
+      }
+    }
+
+    // ========================================
+    // STEP 7: Generic URL Fallback (CONSERVATIVE) ⭐ CHANGED
+    // ========================================
+    if (/^https?:\/\/.+/i.test(trimmed)) {
+      try {
+        const url = new URL(trimmed);
+
+        // Only suggest RSS if URL has a meaningful path
+        // (not just homepage like https://example.com/)
+        const hasPath = url.pathname.length > 1 && url.pathname !== '/';
+
+        if (hasPath) {
+          const cleanDomain = cleanRssUrl(trimmed);
+
+          // Try as RSS feed (user should verify)
+          const feedUrl = trimmed.endsWith('/')
+            ? `${trimmed}feed`
+            : `${trimmed}/feed`;
+
+          return {
+            type: 'rss',
+            value: feedUrl,
+            icon: '📰',
+            displayName: cleanDomain,
+            description: '⚠️ Auto-detected as RSS (please verify)',
+          };
+        }
+
+        // Homepage URL with no clear indicators - treat as blog
+        const cleanDomain = cleanRssUrl(trimmed);
+        return {
+          type: 'blog',
+          value: trimmed,
+          icon: '📝',
+          displayName: cleanDomain,
+          description: '⚠️ Detected as blog (please verify)',
+        };
+      } catch {
+        // Invalid URL
+        return null;
+      }
     }
 
     return null;

@@ -912,13 +912,43 @@ export default function DashboardPage() {
             </>
           )}
 
-          {/* Unified Source Setup - Show when no sources configured */}
-          {!hasSources && !isLoading && (
-            <UnifiedSourceSetup
-              onSourcesAdded={handleUnifiedSourcesAdded}
-              isLoading={isLoading}
-              existingSources={config?.sources || []}
-            />
+          {/* Unified Source Setup - Always available, collapsible when sources exist */}
+          {!isLoading && (
+            <div className="space-y-4">
+              {hasSources ? (
+                <details className="group">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-center justify-between p-4 border-2 border-dashed border-primary/30 rounded-lg hover:bg-primary/5 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">📋</span>
+                        <div>
+                          <h3 className="font-semibold text-lg">Bulk Add Sources</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Paste multiple sources at once (Reddit, RSS, Twitter, YouTube, Blogs)
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-muted-foreground group-open:rotate-180 transition-transform">
+                        ▼
+                      </span>
+                    </div>
+                  </summary>
+                  <div className="mt-4">
+                    <UnifiedSourceSetup
+                      onSourcesAdded={handleUnifiedSourcesAdded}
+                      isLoading={isLoading}
+                      existingSources={config?.sources || []}
+                    />
+                  </div>
+                </details>
+              ) : (
+                <UnifiedSourceSetup
+                  onSourcesAdded={handleUnifiedSourcesAdded}
+                  isLoading={isLoading}
+                  existingSources={config?.sources || []}
+                />
+              )}
+            </div>
           )}
 
           {/* Workspace Management - Available for both individual and agency users */}
