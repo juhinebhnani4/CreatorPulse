@@ -52,9 +52,14 @@ class ContentItem:
     scraped_at: datetime = field(default_factory=datetime.now)
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert ContentItem to dictionary."""
+        """
+        Convert ContentItem to dictionary.
+
+        Automatically extracts database ID from metadata if present.
+        This ensures API responses always include the 'id' field.
+        """
         created_at_iso = self.created_at.isoformat() if self.created_at else None
-        return {
+        result = {
             'title': self.title,
             'source': self.source,
             'source_type': self.source,  # Added for frontend compatibility (same as source)
@@ -77,6 +82,13 @@ class ContentItem:
             'metadata': self.metadata,
             'scraped_at': self.scraped_at.isoformat() if self.scraped_at else None,
         }
+
+        # Extract database ID from metadata if present (stored there by database layer)
+        # This ensures the API response includes 'id' as a top-level field
+        if 'id' in self.metadata:
+            result['id'] = self.metadata['id']
+
+        return result
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ContentItem':

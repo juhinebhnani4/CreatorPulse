@@ -80,6 +80,16 @@ export default function ContentPage() {
 
       setItems(contentData.items);
       setTotal(contentData.total);
+
+      // DEBUG: Log first item to verify structure
+      if (contentData.items.length > 0) {
+        console.log('[Content] Sample item structure:', {
+          id: contentData.items[0].id,
+          hasId: !!contentData.items[0].id,
+          idType: typeof contentData.items[0].id,
+          keys: Object.keys(contentData.items[0])
+        });
+      }
     } catch (error: any) {
       console.error('Failed to fetch content:', error);
       toast({
@@ -161,13 +171,35 @@ export default function ContentPage() {
   const handleFeedback = async (itemId: string, rating: 'positive' | 'negative') => {
     if (!currentWorkspace) return;
 
-    try {
-      await feedbackApi.submitFeedback({
-        workspace_id: currentWorkspace.id,
-        content_item_id: itemId,
-        rating: rating === 'positive' ? 5 : 1,
-        feedback_type: 'content_quality'
+    // CRITICAL: Validate itemId exists and is not empty
+    if (!itemId || itemId === 'undefined' || itemId === 'null') {
+      console.error('[Feedback] Invalid itemId:', itemId);
+      toast({
+        title: 'Invalid Item',
+        description: 'Cannot submit feedback for invalid content item',
+        variant: 'destructive',
       });
+      return;
+    }
+
+    console.log('[Feedback] Submitting feedback:', {
+      itemId,
+      rating,
+      itemIdType: typeof itemId,
+      itemIdLength: itemId.length
+    });
+
+    try {
+      const payload = {
+        content_item_id: itemId,
+        rating: rating,
+        included_in_final: false,
+        feedback_notes: 'Quick feedback from content library'
+      };
+
+      console.log('[Feedback] Payload before API call:', JSON.stringify(payload, null, 2));
+
+      await feedbackApi.createItemFeedback(payload);
 
       toast({
         title: '✓ Feedback Recorded',
@@ -175,7 +207,7 @@ export default function ContentPage() {
         duration: 2000
       });
     } catch (error: any) {
-      console.error('Failed to submit feedback:', error);
+      console.error('[Feedback] Error details:', error);
       toast({
         title: 'Feedback Failed',
         description: error.message || 'Failed to record feedback',
