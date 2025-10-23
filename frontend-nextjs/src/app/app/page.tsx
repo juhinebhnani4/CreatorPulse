@@ -337,6 +337,7 @@ export default function DashboardPage() {
             console.error('Failed to fetch newsletters:', newslettersResult.reason);
             setDraftStatus('empty');
           }
+        }
       } catch (error: any) {
         console.error('Failed to fetch data:', error);
         toast({
