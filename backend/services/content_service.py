@@ -248,6 +248,10 @@ class ContentService:
         if not workspace:
             raise ValueError("Workspace not found")
 
+        # Verify user has access to this workspace
+        if not self.supabase.user_has_workspace_access(user_id, workspace_id):
+            raise ValueError("Access denied: User not in workspace")
+
         # Get workspace config
         config = self.supabase.get_workspace_config(workspace_id)
 
@@ -743,6 +747,10 @@ class ContentService:
         if not workspace:
             raise ValueError("Workspace not found")
 
+        # Verify user has access to this workspace
+        if not self.supabase.user_has_workspace_access(user_id, workspace_id):
+            raise ValueError("Access denied: User not in workspace")
+
         # Load content items
         items = self.supabase.load_content_items(
             workspace_id=workspace_id,
@@ -789,6 +797,10 @@ class ContentService:
         workspace = self.supabase.get_workspace(workspace_id)
         if not workspace:
             raise ValueError("Workspace not found")
+
+        # Verify user has access to this workspace
+        if not self.supabase.user_has_workspace_access(user_id, workspace_id):
+            raise ValueError("Access denied: User not in workspace")
 
         # Get all content items (last 30 days)
         all_items = self.supabase.load_content_items(
@@ -869,6 +881,11 @@ class ContentService:
             print(f"[ContentService] ERROR: Workspace not found - raising ValueError")
             raise ValueError("Workspace not found")
 
+        # Verify user has access to this workspace
+        if not self.supabase.user_has_workspace_access(user_id, existing_item['workspace_id']):
+            print(f"[ContentService] ERROR: User does not have access to workspace - raising ValueError")
+            raise ValueError("Access denied: User not in workspace")
+
         print(f"[ContentService] OK: User has access to workspace: {workspace.get('name')}")
 
         # Update the item
@@ -909,6 +926,10 @@ class ContentService:
         workspace = self.supabase.get_workspace(workspace_id)
         if not workspace:
             raise ValueError("Workspace not found")
+
+        # Verify user has access to this workspace
+        if not self.supabase.user_has_workspace_access(user_id, workspace_id):
+            raise ValueError("Access denied: User not in workspace")
 
         # Cap limits to prevent abuse
         limit = min(limit, 10)

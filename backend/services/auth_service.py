@@ -108,6 +108,53 @@ class AuthService:
 
                 print(f"✓ User created in public.users table: {user.email}")
 
+                # Create default workspace for new user
+                try:
+                    workspace_result = self.service_client.table('workspaces').insert({
+                        'name': f"{username}'s Workspace",
+                        'description': "Your default workspace",
+                        'owner_id': str(user.id)
+                    }).execute()
+
+                    if workspace_result.data:
+                        workspace_id = workspace_result.data[0]['id']
+
+                        # Add user to user_workspaces table with owner role
+                        self.service_client.table('user_workspaces').insert({
+                            'user_id': str(user.id),
+                            'workspace_id': workspace_id,
+                            'role': 'owner',
+                            'accepted_at': datetime.now().isoformat()
+                        }).execute()
+
+                        # Create default workspace config
+                        self.service_client.table('workspace_configs').insert({
+                            'workspace_id': workspace_id,
+                            'config': {
+                                'sources': [],  # User will add sources later
+                                'generation': {
+                                    'model': 'openai',
+                                    'temperature': 0.7,
+                                    'tone': 'professional',
+                                    'language': 'en',
+                                    'max_items': 10
+                                },
+                                'delivery': {
+                                    'method': 'smtp',
+                                    'from_name': username
+                                }
+                            },
+                            'updated_by': str(user.id)
+                        }).execute()
+
+                        print(f"✓ Created default workspace: {workspace_id} for user {username}")
+
+                except Exception as workspace_error:
+                    # Don't fail signup if workspace creation fails
+                    # User can create workspace manually later
+                    print(f"⚠️ WARNING: Could not create default workspace: {workspace_error}")
+                    # Continue with signup - user still gets account
+
             except Exception as user_table_error:
                 # Critical error - rollback auth user and fail signup
                 print(f"ERROR: Could not create user in public.users table: {user_table_error}")

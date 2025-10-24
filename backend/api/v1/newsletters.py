@@ -67,6 +67,7 @@ async def generate_newsletter(
         return APIResponse.success_response({
             "message": "Newsletter generated successfully",
             "newsletter": result['newsletter'],
+            "items": result.get('items', []),
             "content_items_count": result['content_items_count'],
             "sources_used": result['sources_used']
         })
@@ -140,10 +141,19 @@ async def list_workspace_newsletters(
         return APIResponse.success_response(result)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -183,10 +193,19 @@ async def get_workspace_newsletter_stats(
         return APIResponse.success_response(stats)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -220,10 +239,19 @@ async def get_newsletter(
         return APIResponse.success_response(newsletter)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -267,10 +295,19 @@ async def delete_newsletter(
             )
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -316,10 +353,19 @@ async def regenerate_newsletter(
         })
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -384,10 +430,19 @@ async def update_newsletter(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -430,10 +485,19 @@ async def update_newsletter_html(
         })
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         logger.error(f"Failed to update newsletter HTML: {str(e)}")
         raise HTTPException(

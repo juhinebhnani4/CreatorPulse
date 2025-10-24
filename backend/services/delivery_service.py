@@ -80,6 +80,10 @@ class DeliveryService:
             Exception: If send fails
         """
         try:
+            # Verify user has access to workspace
+            if not self.db.user_has_workspace_access(user_id, workspace_id):
+                raise Exception("Access denied: User not in workspace")
+
             # Get newsletter
             newsletter = self.db.get_newsletter(newsletter_id)
             if not newsletter:
@@ -109,7 +113,8 @@ class DeliveryService:
             delivery = self.db.create_delivery(
                 newsletter_id=newsletter_id,
                 workspace_id=workspace_id,
-                total_subscribers=len(subscribers)
+                total_subscribers=len(subscribers),
+                started_at=datetime.now().isoformat()
             )
 
             # Update delivery status to sending
@@ -303,6 +308,10 @@ class DeliveryService:
             if not delivery:
                 raise Exception("Delivery not found")
 
+            # Verify user has access to delivery's workspace
+            if not self.db.user_has_workspace_access(user_id, delivery['workspace_id']):
+                raise Exception("Access denied: User not in workspace")
+
             return delivery
 
         except Exception as e:
@@ -326,6 +335,10 @@ class DeliveryService:
             List of delivery data
         """
         try:
+            # Verify user has access to workspace
+            if not self.db.user_has_workspace_access(user_id, workspace_id):
+                raise Exception("Access denied: User not in workspace")
+
             deliveries = self.db.list_deliveries(
                 workspace_id=workspace_id,
                 limit=limit

@@ -60,10 +60,19 @@ async def scrape_content(
         })
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -106,10 +115,19 @@ async def list_workspace_content(
         return APIResponse.success_response(result)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -149,10 +167,19 @@ async def get_workspace_content_stats(
         return APIResponse.success_response(stats)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -208,10 +235,19 @@ async def get_top_stories(
         return APIResponse.success_response(result)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -283,10 +319,19 @@ async def update_content_item(
         return APIResponse.success_response(updated_item)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        # ValueError from services can indicate access denied or validation error
+        error_msg = str(e).lower()
+        if "access denied" in error_msg or "not in workspace" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        else:
+            # Other ValueErrors are validation errors (404)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -53,7 +53,13 @@ class SchedulerService(BaseService):
         if not workspace:
             raise NotFoundError(f"Workspace {request.workspace_id} not found")
 
+        # Verify user has access to workspace
+        if not self.db.user_has_workspace_access(user_id, request.workspace_id):
+            raise NotFoundError(f"Access denied: User not in workspace")
+
         # Prepare job data
+        # TODO (v1.5): Expose cron_expression in frontend UI for power users
+        # Backend already supports it (worker.py:166-178), just needs UI controls
         job_data = {
             "workspace_id": request.workspace_id,
             "name": request.name,
@@ -89,7 +95,10 @@ class SchedulerService(BaseService):
             List of SchedulerJobResponse objects (empty list on error)
         """
         self.logger.info(f"Listing jobs for workspace {workspace_id}")
-        # RLS ensures user can only see their workspaces
+        # Verify user has access to workspace
+        if not self.db.user_has_workspace_access(user_id, workspace_id):
+            raise NotFoundError(f"Access denied: User not in workspace")
+
         jobs = self.db.list_scheduler_jobs(workspace_id)
         self.logger.info(f"Found {len(jobs)} jobs for workspace {workspace_id}")
         return [SchedulerJobResponse(**job) for job in jobs]
@@ -115,6 +124,8 @@ class SchedulerService(BaseService):
 
         # Verify user has access to this workspace
         workspace = self.db.get_workspace(job['workspace_id'])
+        if not self.db.user_has_workspace_access(user_id, job['workspace_id']):
+            raise NotFoundError(f"Access denied: User not in workspace")
         if not workspace:
             raise NotFoundError("Access denied")
 

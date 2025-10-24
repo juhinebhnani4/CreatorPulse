@@ -84,6 +84,11 @@ class NewsletterService:
         workspace = self.supabase.get_workspace(workspace_id)
         if not workspace:
             raise ValueError("Workspace not found")
+
+        # Verify user has access to this workspace
+        if not self.supabase.user_has_workspace_access(user_id, workspace_id):
+            raise ValueError("Access denied: User not in workspace")
+
         return workspace
 
     async def generate_newsletter(
@@ -306,6 +311,92 @@ class NewsletterService:
             'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
         }
 
+    def _apply_freshness_decay(self, content_items_dicts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Apply time-based score decay to prioritize recent content.
+
+        Industry standard: Quality + recency hybrid scoring.
+        Older content gets exponentially penalized to prevent stale content domination.
+
+        Args:
+            content_items_dicts: List of content items with scores
+
+        Returns:
+            Same list with adjusted scores based on age
+        """
+        from datetime import datetime, timezone
+
+        print(f"[FreshnessDecay] FUNCTION CALLED - Processing {len(content_items_dicts)} items")
+
+        now = datetime.now(timezone.utc)
+
+        items_processed = 0
+        items_skipped = 0
+
+        for item in content_items_dicts:
+            # Parse scraped_at timestamp
+            scraped_at_str = item.get('scraped_at')
+            if not scraped_at_str:
+                items_skipped += 1
+                print(f"[FreshnessDecay] SKIPPED - Item missing scraped_at: {item.get('id', 'unknown')}")
+                continue
+
+            try:
+                # Handle both ISO format with and without timezone
+                scraped_at = datetime.fromisoformat(scraped_at_str.replace('Z', '+00:00'))
+                age_days = (now - scraped_at).days
+
+                # Calculate decay multiplier (exponential decay curve)
+                # Balances quality vs recency - high-quality old content can still rank
+                if age_days <= 3:
+                    decay_multiplier = 1.0      # 100% - Fresh content (0-3 days)
+                elif age_days <= 7:
+                    decay_multiplier = 0.7      # 70% - Recent content (4-7 days)
+                elif age_days <= 14:
+                    decay_multiplier = 0.4      # 40% - Week-old content (8-14 days)
+                elif age_days <= 30:
+                    decay_multiplier = 0.15     # 15% - Month-old content (15-30 days)
+                else:
+                    decay_multiplier = 0.05     # 5% - Stale content (30+ days)
+
+                # Apply decay to score
+                original_score = item.get('score', 0)
+                decayed_score = int(original_score * decay_multiplier)
+
+                # Store for debugging and future config
+                item['freshness_age_days'] = age_days
+                item['freshness_decay'] = decay_multiplier
+                item['score_before_decay'] = original_score
+                item['score'] = decayed_score
+
+                items_processed += 1
+
+                # Log decay calculation (truncate title for readability)
+                # Use try/except to prevent Unicode errors from breaking business logic
+                try:
+                    title = item.get('title', 'Untitled')[:50]
+                    # Replace non-ASCII characters to avoid Windows console encoding issues
+                    safe_title = title.encode('ascii', errors='replace').decode('ascii')
+                    print(f"[FreshnessDecay] '{safe_title}' - Age: {age_days}d, Decay: {decay_multiplier}, Score: {original_score} -> {decayed_score}")
+                except Exception:
+                    # Silent fallback - logging should never break the pipeline
+                    pass
+
+            except Exception as e:
+                items_skipped += 1
+                print(f"[FreshnessDecay] WARNING: Failed to parse scraped_at for item {item.get('id', 'unknown')}: {e}")
+                continue
+
+        print(f"[FreshnessDecay] SUMMARY - Processed: {items_processed}, Skipped: {items_skipped}, Total: {len(content_items_dicts)}")
+
+        # Remove diagnostic fields before returning (Pydantic ContentItem model doesn't accept extra fields)
+        for item in content_items_dicts:
+            item.pop('freshness_age_days', None)
+            item.pop('freshness_decay', None)
+            item.pop('score_before_decay', None)
+
+        return content_items_dicts
+
     async def _fetch_and_filter_content(
         self,
         workspace_id: str,
@@ -342,6 +433,36 @@ class NewsletterService:
 
         if not content_items:
             raise ValueError(f"No content found in workspace for the last {days_back} days")
+
+        # Exclude items from recently sent newsletters (prevents content repetition)
+        excluded_ids = set(self.supabase.get_recently_sent_content_ids(
+            workspace_id=workspace_id,
+            days_back=30,  # Exclude items from last 30 days of sent newsletters
+            max_newsletters=3  # Or last 3 newsletters, whichever is more restrictive
+        ))
+
+        if excluded_ids:
+            print(f"[ContentFilter] Excluding {len(excluded_ids)} content IDs from {len(content_items)} available items")
+
+            # Filter out excluded items
+            original_count = len(content_items)
+            content_items = [
+                item for item in content_items
+                if item.id not in excluded_ids
+            ]
+            filtered_count = len(content_items)
+
+            print(f"[ContentFilter] Filtered from {original_count} to {filtered_count} items ({original_count - filtered_count} excluded)")
+
+            if not content_items:
+                print(f"[ContentFilter] WARNING: All items were excluded! Falling back to original pool.")
+                # Fallback: reload without exclusion (ensures newsletter can be generated)
+                content_items = self.supabase.load_content_items(
+                    workspace_id=workspace_id,
+                    days=days_back,
+                    source=sources[0] if sources and len(sources) == 1 else None,
+                    limit=max_items * NewsletterConstants.CONTENT_FETCH_MULTIPLIER
+                )
 
         # Filter by sources if specified
         if sources:
@@ -391,7 +512,20 @@ class NewsletterService:
                     item['original_score'] = item.get('score', 0)
                     item['score'] = int(item.get('score', 0) * NewsletterConstants.TREND_SCORE_BOOST_MULTIPLIER)
 
-        # Re-sort by score after trend boosting
+        # Apply freshness decay to prioritize recent content (industry standard)
+        print(f"[FreshnessDecay] About to apply decay to {len(content_items_dicts)} items")
+        if content_items_dicts:
+            first_item_keys = list(content_items_dicts[0].keys())
+            has_scraped_at = 'scraped_at' in first_item_keys
+            print(f"[FreshnessDecay] First item keys: {first_item_keys[:10]}")
+            print(f"[FreshnessDecay] Has 'scraped_at' field: {has_scraped_at}")
+            if has_scraped_at:
+                print(f"[FreshnessDecay] scraped_at value: {content_items_dicts[0].get('scraped_at')}")
+
+        content_items_dicts = self._apply_freshness_decay(content_items_dicts)
+        print(f"[FreshnessDecay] Decay applied, {len(content_items_dicts)} items remain")
+
+        # Re-sort by score after trend boosting and freshness decay
         content_items_dicts.sort(key=lambda x: x.get('score', 0), reverse=True)
 
         # Limit to max_items
@@ -689,7 +823,11 @@ class NewsletterService:
             first_item = items[0]
             print(f"[_populate_newsletter_items] First item sample:")
             print(f"  - id: {first_item.get('id', 'MISSING')}")
-            print(f"  - title: {first_item.get('title', 'MISSING')[:50] if first_item.get('title') else 'MISSING'}")
+            # Unicode-safe title printing (handles emojis on Windows console)
+            title = first_item.get('title', 'MISSING')[:50] if first_item.get('title') else 'MISSING'
+            # Use errors='replace' to prevent crashes from emoji characters
+            safe_title = title.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+            print(f"  - title: {safe_title}")
             print(f"  - source: {first_item.get('source', 'MISSING')}")
             print(f"  - Keys: {list(first_item.keys())[:10]}")
 
@@ -774,20 +912,32 @@ class NewsletterService:
         Returns:
             Newsletter data
         """
-        newsletter = self.supabase.get_newsletter(newsletter_id)
+        try:
+            newsletter = self.supabase.get_newsletter(newsletter_id)
 
-        if not newsletter:
-            raise ValueError("Newsletter not found")
+            if not newsletter:
+                raise ValueError("Newsletter not found")
 
-        # Verify user has access to workspace
-        workspace = self.supabase.get_workspace(newsletter['workspace_id'])
-        if not workspace:
-            raise ValueError("Access denied")
+            # Verify user has access to the workspace
+            print(f"[get_newsletter] Checking workspace access for user {user_id}, workspace {newsletter['workspace_id']}")
+            has_access = self.supabase.user_has_workspace_access(
+                user_id=user_id,
+                workspace_id=newsletter['workspace_id']
+            )
+            print(f"[get_newsletter] Access check result: {has_access}")
 
-        # Populate items field from content_item_ids
-        newsletter = self._populate_newsletter_items(newsletter)
+            if not has_access:
+                raise ValueError("Access denied")
 
-        return newsletter
+            # Populate items field from content_item_ids
+            newsletter = self._populate_newsletter_items(newsletter)
+
+            return newsletter
+        except Exception as e:
+            print(f"[ERROR] get_newsletter failed: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     async def delete_newsletter(
         self,
