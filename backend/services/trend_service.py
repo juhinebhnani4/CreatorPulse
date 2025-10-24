@@ -288,8 +288,19 @@ class TrendDetectionService(BaseService):
                     if entity_text.isupper() and len(entity_text) < 5:
                         continue
 
-                    # 3. Month-ending entities (CompanyJan, CompanyOct, etc.)
-                    if any(entity_text.endswith(month) for month in month_suffixes):
+                    # 3. Month-ending entities (CompanyJan, Company Oct, Company-Oct, etc.)
+                    entity_lower = entity_text.lower()
+                    skip_month = False
+                    for month in month_suffixes:
+                        month_lower = month.lower()
+                        if (entity_lower.endswith(month_lower) or
+                            entity_lower.endswith(f' {month_lower}') or
+                            entity_lower.endswith(f'-{month_lower}') or
+                            f'{month_lower} ' in entity_lower):  # "Oct 2025" patterns
+                            skip_month = True
+                            break
+
+                    if skip_month:
                         continue
 
                     entities[entity_text] += 1
@@ -297,7 +308,35 @@ class TrendDetectionService(BaseService):
         # Return most frequent named entity
         if entities:
             top_entity = max(entities.items(), key=lambda x: x[1])[0]
-            return top_entity
+
+            # Fix common casing issues
+            casing_fixes = {
+                'chatgpt': 'ChatGPT',
+                'openai': 'OpenAI',
+                'gpt': 'GPT',
+                'api': 'API',
+                'youtube': 'YouTube',
+                'microsoft': 'Microsoft',
+                'google': 'Google',
+                'apple': 'Apple',
+                'amazon': 'Amazon',
+                'meta': 'Meta',
+                'tesla': 'Tesla',
+                'nvidia': 'NVIDIA',
+                'amd': 'AMD',
+            }
+
+            entity_key = top_entity.lower()
+            if entity_key in casing_fixes:
+                top_entity = casing_fixes[entity_key]
+
+            # Reject generic single words (fall back to n-grams instead)
+            generic_words = {'ai', 'tech', 'new', 'latest', 'best', 'top', 'guide', 'review', 'news'}
+            if top_entity.lower() in generic_words:
+                # Fall through to n-gram fallback below
+                pass
+            else:
+                return top_entity
 
         # Fallback to n-grams
         ngrams = [kw for kw in keywords if ' ' in kw]
@@ -371,13 +410,36 @@ class TrendDetectionService(BaseService):
                 if j in used:
                     continue
 
+                # Fallback 1: Merge topics with exact same name (case-insensitive)
+                if topic1['topic'].lower().strip() == topic2['topic'].lower().strip():
+                    self.logger.debug(
+                        f"Merging topics by name: '{topic1['topic']}' + '{topic2['topic']}' (exact name match)"
+                    )
+
+                    kw2 = set(topic2['keywords'])
+
+                    # Merge topic2 into topic1
+                    merged_topic['items'].extend(topic2['items'])
+                    merged_topic['keywords'] = list(set(topic1['keywords']) | kw2)[:5]
+                    merged_topic['mention_count'] += topic2['mention_count']
+                    merged_topic['sources'] = list(set(merged_topic['sources'] + topic2['sources']))
+                    merged_topic['source_count'] = len(merged_topic['sources'])
+
+                    # Use topic name from higher velocity topic
+                    if topic2.get('velocity', 0) > topic1.get('velocity', 0):
+                        merged_topic['topic'] = topic2['topic']
+
+                    used.add(j)
+                    continue  # Skip keyword overlap check
+
+                # Fallback 2: Merge topics with high keyword overlap
                 kw2 = set(topic2['keywords'])
                 overlap = len(kw1 & kw2) / len(kw1 | kw2)  # Jaccard similarity
 
                 if overlap >= 0.7:  # 70% keyword overlap (more conservative)
                     # Log merge decision for debugging
                     self.logger.debug(
-                        f"Merging topics: '{topic1['topic']}' + '{topic2['topic']}' "
+                        f"Merging topics by keywords: '{topic1['topic']}' + '{topic2['topic']}' "
                         f"(overlap={overlap:.2f}, shared keywords={list(kw1 & kw2)})"
                     )
 
