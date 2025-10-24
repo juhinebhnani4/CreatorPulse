@@ -149,28 +149,18 @@ class TrendDetectionService(BaseService):
         end_date: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
         """Get recent content items from database."""
-        # Build query filters
-        filters = {
-            "workspace_id": workspace_id,
-            "created_at_gte": start_date.isoformat()
-        }
-
-        if end_date:
-            filters["created_at_lt"] = end_date.isoformat()
-
-        if sources:
-            filters["source_in"] = sources
-
-        # Fetch from database
+        # Fetch from database using correct parameter names
         try:
             items = self.db.list_content_items(
-                workspace_id,
-                limit=1000,  # Analyze up to 1000 items
-                **filters
+                workspace_id=workspace_id,
+                start_date=start_date,      # Pass datetime directly (not ISO string)
+                end_date=end_date,           # Pass datetime directly (not ISO string)
+                sources=sources,             # Pass list directly
+                limit=1000                   # Analyze up to 1000 items
             )
             return items
         except Exception as e:
-            print(f"Error fetching content: {e}")
+            self.logger.error(f"Error fetching content: {e}")
             return []
 
     def _extract_topics(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

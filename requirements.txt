@@ -40,6 +40,7 @@ nltk>=3.8.0
 textstat>=0.7.3
 scikit-learn>=1.3.0
 numpy>=1.24.0
+spacy>=3.7.0  # Named Entity Recognition for trend detection
 
 # Analytics
 Pillow>=10.0.0

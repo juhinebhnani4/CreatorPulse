@@ -57,10 +57,10 @@ class TrendConstants:
     MAX_CLUSTERS: int = int(os.getenv("MAX_CLUSTERS", "10"))
     MIN_CLUSTERS: int = int(os.getenv("MIN_CLUSTERS", "3"))
 
-    # Scoring weights
-    MENTION_SCORE_WEIGHT: float = 0.3
-    VELOCITY_SCORE_WEIGHT: float = 0.4
-    SOURCE_DIVERSITY_WEIGHT: float = 0.3
+    # Scoring weights (velocity-first for breaking news)
+    MENTION_SCORE_WEIGHT: float = 0.2      # Reduced from 0.3
+    VELOCITY_SCORE_WEIGHT: float = 0.6     # Increased from 0.4
+    SOURCE_DIVERSITY_WEIGHT: float = 0.2   # Reduced from 0.3
 
     # Confidence levels
     HIGH_CONFIDENCE_THRESHOLD: float = 0.75
