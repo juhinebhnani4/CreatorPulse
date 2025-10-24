@@ -1,0 +1,48 @@
+
+================================================================================
+  NEWSLETTER FRESHNESS DIAGNOSTIC TOOL
+  Generated: 2025-10-24 17:14:13
+================================================================================
+    
+
+================================================================================
+  DATABASE ANALYSIS: Content Age Distribution
+================================================================================
+
+Workspace: Juhi Workspace (aec6120d-42ec-438b-b0ae-c8149ae6ca9b)
+
+Total content items retrieved: 30
+
+ID                                       Source     Age (days)   Title                                             
+------------------------------------------------------------------------------------------------------------------------
+fb1a70a4-d0f2-4d03-9478-f2a41bbc5ce8     blog       -1           Lifewire: Tech News, Reviews, Help & How-Tos      
+e6e6ef7c-0ad5-41e4-a357-35f713f8ca46     blog       -1           AI at Meta Blog                                   
+b231d108-454d-4826-bb9d-1911f6997347     blog       -1           TechCrunch | Startup and Technology News          
+26fd2866-b3d3-407a-aafa-c28ca99710c1     blog       -1           AI                                                
+Traceback (most recent call last):
+  File "E:\Career coaching\100x\scraper-scripts\diagnose_newsletter_freshness.py", line 382, in main
+    workspace_id = analyze_content_age()
+  File "E:\Career coaching\100x\scraper-scripts\diagnose_newsletter_freshness.py", line 104, in analyze_content_age
+    print(f"{item['id']:<40} {item['source']:<10} {age_days:<12} {title:<50}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Jyotsna\AppData\Roaming\uv\python\cpython-3.13.8-windows-x86_64-none\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 93-97: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "E:\Career coaching\100x\scraper-scripts\diagnose_newsletter_freshness.py", line 408, in <module>
+    main()
+    ~~~~^^
+  File "E:\Career coaching\100x\scraper-scripts\diagnose_newsletter_freshness.py", line 402, in main
+    print_status("RED", f"Error during diagnosis: {e}")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\Career coaching\100x\scraper-scripts\diagnose_newsletter_freshness.py", line 37, in print_status
+    print(f"{icon} {message}{reset}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Jyotsna\AppData\Roaming\uv\python\cpython-3.13.8-windows-x86_64-none\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 5: character maps to <undefined>

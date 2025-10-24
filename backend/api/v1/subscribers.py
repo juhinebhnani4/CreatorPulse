@@ -1,5 +1,13 @@
 """
 Subscriber API endpoints.
+
+TODO (v2+): Add name field for personalized email greetings
+To implement personalization:
+1. Run migration: ALTER TABLE subscribers ADD COLUMN name TEXT;
+2. Update SubscriberCreate model to include 'name' field
+3. Update subscriber forms to collect name
+4. Update email templates with {{ subscriber.name or 'there' }}
+Decision: Skipped in MVP to focus on content quality (core differentiator)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -51,8 +59,6 @@ async def create_subscriber(
         subscriber = db.add_subscriber(
             workspace_id=request.workspace_id,
             email=request.email,
-            name=request.name,
-            source=request.source,
             metadata=request.metadata
         )
 
@@ -93,8 +99,6 @@ async def create_subscribers_bulk(
                 subscriber = db.add_subscriber(
                     workspace_id=request.workspace_id,
                     email=sub_data.get('email'),
-                    name=sub_data.get('name'),
-                    source='import',
                     metadata=sub_data.get('metadata', {})
                 )
                 created.append(subscriber)
@@ -224,8 +228,6 @@ async def update_subscriber(
 
         # Build updates dict (only include provided fields)
         updates = {}
-        if request.name is not None:
-            updates['name'] = request.name
         if request.status is not None:
             updates['status'] = request.status
         if request.metadata is not None:

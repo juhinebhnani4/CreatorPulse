@@ -1,7 +1,7 @@
 <!--
 FILE: CLAUDE.md
 PRIORITY: 1 - CRITICAL - READ THIS FIRST EVERY CHAT
-LAST_UPDATED: 2025-01-20
+LAST_UPDATED: 2025-01-24
 AUTO_UPDATE: Yes (via .git/hooks/post-commit)
 TOKEN_BUDGET: ~20k tokens (10% of 200k budget)
 -->
@@ -1056,48 +1056,60 @@ NEXT_PUBLIC_API_URL=http://localhost:8000  # Backend URL
    - **TODO**: Add Redis caching for workspace configs, popular content
    - **Files**: All services
 
-3. **Type Mismatch Cleanup** (Frontend/Backend consistency)
-   - **Issue**: Some legacy code still uses old field names (`html_content` vs `content_html`)
-   - **Impact**: Intermittent TypeScript errors, runtime crashes
-   - **TODO**: Global find-replace and type validation
-   - **Files**: `frontend-nextjs/src/types/*.ts`, various components
-
 ### Medium Priority
 
-4. **Rate Limiting Configuration** (Security)
+3. **Rate Limiting Configuration** (Security)
    - **Issue**: Default 60 req/min may be too restrictive for some endpoints, too lenient for others
    - **TODO**: Fine-tune per endpoint (e.g., auth: 5/min, content read: 100/min)
    - **Files**: `backend/api/v1/*.py` (add `@limiter.limit()` decorators)
 
-5. **Database Indexing** (Performance)
+4. **Database Indexing** (Performance)
    - **Issue**: Missing indexes on frequently queried foreign keys
    - **TODO**: Add indexes on `workspace_id`, `newsletter_id`, `content_item_id`
-   - **Files**: New migration file `backend/migrations/011_add_performance_indexes.sql`
+   - **Files**: New migration file `backend/migrations/015_add_performance_indexes.sql`
 
-6. **Error Message Specificity** (Developer Experience)
+5. **Error Message Specificity** (Developer Experience)
    - **Issue**: Many errors return generic 500 with "Internal Server Error"
    - **TODO**: Custom exception classes with specific HTTP status codes
    - **Files**: `backend/utils/error_handling.py`, all services
 
 ### Low Priority
 
-7. **Test Coverage** (Quality Assurance)
+6. **Test Coverage** (Quality Assurance)
    - **Issue**: Limited unit tests, mainly integration tests
    - **Current**: ~40% coverage
    - **TODO**: Increase to 80%+ with unit tests for services
    - **Files**: `backend/tests/unit/` (expand)
 
-8. **API Documentation** (Developer Experience)
+7. **API Documentation** (Developer Experience)
    - **Issue**: Swagger docs exist but not always up-to-date
    - **TODO**: Automate OpenAPI spec generation from Pydantic models
    - **Files**: `backend/main.py` (FastAPI auto-docs)
 
-9. **Configuration Consolidation** (Maintainability)
+8. **Configuration Consolidation** (Maintainability)
    - **Issue**: Settings split between `backend/settings.py`, `backend/config/constants.py`, `.env`
    - **TODO**: Consolidate into single Pydantic settings class
    - **Files**: Create `backend/config/settings.py`, deprecate `constants.py`
 
 ### Recently Fixed
+
+✅ **Database Schema Cleanup** (Fixed 2025-01-24)
+- **Was**: 10 unused columns + 1 unused table cluttering schema
+- **Now**: Clean schema with only actively-used fields
+- **Files**: `backend/migrations/014_remove_unused_fields.sql`
+- **Removed**: `subscribers.name/source`, `scheduler_jobs.description/config/last_error`, `scheduler_executions.error_details/execution_log`, `trend_content_items` table
+- **Impact**: 15% fewer columns, simpler mental model, better query performance
+
+✅ **TTL Cleanup for Historical Content** (Added 2025-01-24)
+- **Was**: `historical_content` table growing indefinitely
+- **Now**: Daily cleanup job deletes records older than 7 days (3 AM UTC)
+- **File**: `backend/worker.py:424-438`
+- **Impact**: GDPR compliance, prevents infinite growth
+
+✅ **Delivery Performance Tracking** (Fixed 2025-01-24)
+- **Was**: `newsletter_deliveries.started_at` never populated
+- **Now**: Tracks when bulk sends start (for performance monitoring)
+- **File**: `backend/services/delivery_service.py:113`
 
 ✅ **Empty Content Newsletter Error** (Fixed 2025-01-20)
 - **Was**: 500 error when generating newsletter with no content
@@ -1109,26 +1121,21 @@ NEXT_PUBLIC_API_URL=http://localhost:8000  # Backend URL
 - **Now**: All services extend `BaseService`, lazy-load DB, standardized logging
 - **File**: `backend/services/base_service.py`
 
-✅ **Rate Limiting** (Added 2025-01-19)
-- **Was**: No rate limiting on resource-intensive endpoints
-- **Now**: 60 req/min default, configurable per endpoint
-- **File**: `backend/middleware/rate_limiter.py`
-
 ---
 
 ## Recent Changes (Auto-Updated by Git Hook)
 
 <!-- Keep last 10 significant changes -->
+- 2025-01-24: Completed database cleanup - removed 10 unused columns + 1 unused table (migration 014)
+- 2025-01-24: Added TTL cleanup job for historical_content (runs daily at 3 AM UTC)
+- 2025-01-24: Fixed delivery started_at tracking for performance monitoring
+- 2025-01-24: Documented future features with TODO comments (cron UI, personalization)
 - 2025-01-22: Completed persistent context system with Priority 2 reference docs (FRONTEND_ARCHITECTURE.md, SETTINGS_COMPONENTS.md)
 - 2025-01-20: Updated documentation to accurately reflect Settings page architecture (unified hub with sidebar, 10 sections)
 - 2025-01-20: Created comprehensive CLAUDE.md context file with priority system and .claude/instructions.md
 - 2025-01-20: Created docs/_PRIORITY_1_CONTEXT/ structure (FRONTEND_BACKEND_MAPPING, COMMON_ERRORS, TYPE_DEFINITIONS)
 - 2025-01-20: Added error handling decorators to services (@handle_service_errors)
 - 2025-01-20: Standardized BaseService pattern across all services
-- 2025-01-20: Fixed newsletter 500 error (empty content handling)
-- 2025-01-20: Added .claudeignore and git hooks for documentation maintenance
-- 2025-01-19: Added rate limiting to resource-intensive endpoints
-- 2025-01-19: Added type validation to service responses
 
 ---
 

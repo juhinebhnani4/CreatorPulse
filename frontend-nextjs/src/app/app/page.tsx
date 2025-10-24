@@ -352,7 +352,7 @@ export default function DashboardPage() {
         }
       }, 1500);
 
-      const result = await newslettersApi.generate({
+      const newsletter = await newslettersApi.generate({
         workspace_id: workspace.id,
         title: `Newsletter - ${new Date().toLocaleDateString()}`,
         ...settings,
@@ -360,8 +360,7 @@ export default function DashboardPage() {
 
       clearInterval(stepInterval);
 
-      // Extract newsletter from API response
-      const newsletter = result.newsletter;
+      console.log('[Dashboard] Generated newsletter:', newsletter);
 
       // Store the generated newsletter for immediate use
       setJustGeneratedNewsletter(newsletter);

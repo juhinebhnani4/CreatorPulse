@@ -15,8 +15,6 @@ class SubscriberCreate(BaseModel):
     """Request model for creating a subscriber."""
     workspace_id: str = Field(..., description="Workspace ID (UUID format)")
     email: EmailStr = Field(..., description="Subscriber email address")
-    name: Optional[str] = Field(None, description="Subscriber name")
-    source: str = Field(default="manual", description="How subscriber was added (manual, api, import)")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata about the subscriber")
 
     class Config:
@@ -24,8 +22,6 @@ class SubscriberCreate(BaseModel):
             "example": {
                 "workspace_id": "1839de43-ebf1-4cc0-bcb4-3f7a2cb37a7b",
                 "email": "subscriber@example.com",
-                "name": "John Doe",
-                "source": "manual",
                 "metadata": {"subscription_type": "premium"}
             }
         }
@@ -34,7 +30,7 @@ class SubscriberCreate(BaseModel):
 class SubscriberBulkCreate(BaseModel):
     """Request model for bulk subscriber creation."""
     workspace_id: str = Field(..., description="Workspace ID (UUID format)")
-    subscribers: List[Dict[str, Any]] = Field(..., description="List of subscriber data (email, name, metadata)")
+    subscribers: List[Dict[str, Any]] = Field(..., description="List of subscriber data (email, metadata)")
 
     class Config:
         json_schema_extra = {
@@ -43,12 +39,10 @@ class SubscriberBulkCreate(BaseModel):
                 "subscribers": [
                     {
                         "email": "user1@example.com",
-                        "name": "Alice Smith",
                         "metadata": {"source": "import", "campaign": "winter2024"}
                     },
                     {
                         "email": "user2@example.com",
-                        "name": "Bob Johnson",
                         "metadata": {"source": "import", "campaign": "winter2024"}
                     }
                 ]
@@ -58,7 +52,6 @@ class SubscriberBulkCreate(BaseModel):
 
 class SubscriberUpdate(BaseModel):
     """Request model for updating a subscriber."""
-    name: Optional[str] = None
     status: Optional[str] = Field(None, description="Subscriber status: active, unsubscribed, bounced")
     metadata: Optional[Dict[str, Any]] = None
 
@@ -68,9 +61,7 @@ class SubscriberResponse(BaseModel):
     id: str
     workspace_id: str
     email: str
-    name: Optional[str]
     status: str
-    source: Optional[str]
     subscribed_at: datetime
     unsubscribed_at: Optional[datetime]
     last_sent_at: Optional[datetime]

@@ -163,6 +163,16 @@ class SupabaseManager:
             # Return None to maintain backwards compatibility but log the issue
             return None
 
+    def user_has_workspace_access(self, user_id: str, workspace_id: str) -> bool:
+        """Check if user has access to workspace."""
+        result = self.service_client.table('user_workspaces') \
+            .select('user_id') \
+            .eq('user_id', user_id) \
+            .eq('workspace_id', workspace_id) \
+            .execute()
+
+        return result.data and len(result.data) > 0
+
     def update_workspace(self,
                         workspace_id: str,
                         updates: Dict[str, Any]) -> Dict[str, Any]:
@@ -841,6 +851,52 @@ class SupabaseManager:
 
         return result.data[0] if result.data and len(result.data) > 0 else None
 
+    def get_recently_sent_content_ids(
+        self,
+        workspace_id: str,
+        days_back: int = 30,
+        max_newsletters: int = None
+    ) -> List[str]:
+        """
+        Get content item IDs from recently sent newsletters.
+
+        Args:
+            workspace_id: Workspace ID
+            days_back: Look back N days (default: 30)
+            max_newsletters: Max newsletters to check (optional)
+
+        Returns:
+            Flat list of all content item IDs used in recent newsletters
+        """
+        from datetime import datetime, timedelta
+
+        # Calculate cutoff date
+        cutoff_date = datetime.now() - timedelta(days=days_back)
+
+        # Query sent newsletters
+        query = self.service_client.table('newsletters') \
+            .select('content_item_ids') \
+            .eq('workspace_id', workspace_id) \
+            .eq('status', 'sent') \
+            .gte('sent_at', cutoff_date.isoformat()) \
+            .order('sent_at', desc=True)
+
+        if max_newsletters:
+            query = query.limit(max_newsletters)
+
+        result = query.execute()
+
+        # Flatten all content_item_ids arrays into single list
+        used_ids = []
+        if result and result.data:
+            for newsletter in result.data:
+                content_ids = newsletter.get('content_item_ids', [])
+                if content_ids:  # Check if not None or empty
+                    used_ids.extend(content_ids)
+
+        # Return unique IDs
+        return list(set(used_ids))
+
     def update_newsletter(self,
                          newsletter_id: str,
                          updates: Dict[str, Any]) -> Dict[str, Any]:
@@ -914,8 +970,6 @@ class SupabaseManager:
     def add_subscriber(self,
                       workspace_id: str,
                       email: str,
-                      name: Optional[str] = None,
-                      source: str = "manual",
                       metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Add a subscriber to workspace.
@@ -923,8 +977,6 @@ class SupabaseManager:
         Args:
             workspace_id: Workspace ID
             email: Subscriber email
-            name: Subscriber name (optional)
-            source: How subscriber was added (manual, api, import)
             metadata: Additional metadata
 
         Returns:
@@ -933,8 +985,6 @@ class SupabaseManager:
         data = {
             'workspace_id': workspace_id,
             'email': email.lower().strip(),  # Normalize email
-            'name': name,
-            'source': source,
             'status': 'active',
             'subscribed_at': datetime.now().isoformat(),
             'metadata': metadata or {}

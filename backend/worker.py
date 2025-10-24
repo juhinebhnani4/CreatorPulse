@@ -63,6 +63,17 @@ class NewsletterWorker:
         )
         logger.info("Scheduled periodic job reload (every 5 minutes)")
 
+        # Schedule daily cleanup of expired historical content (3 AM UTC)
+        self.scheduler.add_job(
+            self.cleanup_expired_historical_content,
+            trigger='cron',
+            hour=3,
+            minute=0,
+            id='cleanup_historical_content',
+            replace_existing=True
+        )
+        logger.info("Scheduled daily historical content cleanup (3:00 AM UTC)")
+
         logger.info("=" * 70)
         logger.info("Worker is ready and monitoring scheduled jobs")
         logger.info("=" * 70)
@@ -409,6 +420,22 @@ class NewsletterWorker:
         except Exception as e:
             logger.error(f"Newsletter sending failed: {e}")
             raise
+
+    async def cleanup_expired_historical_content(self):
+        """Delete expired historical content (older than 7 days by default)."""
+        try:
+            logger.info("Running historical content cleanup...")
+
+            result = self.db.service_client.table('historical_content') \
+                .delete() \
+                .lt('expires_at', datetime.now(timezone.utc).isoformat()) \
+                .execute()
+
+            deleted_count = len(result.data) if result.data else 0
+            logger.info(f"Deleted {deleted_count} expired historical content records")
+
+        except Exception as e:
+            logger.error(f"Historical content cleanup failed: {e}")
 
     async def stop(self):
         """Stop the worker gracefully."""
