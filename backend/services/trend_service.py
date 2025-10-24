@@ -305,7 +305,30 @@ class TrendDetectionService(BaseService):
 
                     entities[entity_text] += 1
 
-        # Return most frequent named entity
+        # Boost entities that appear in top keywords (relevance weighting)
+        # This ensures we pick entities related to the cluster's main topic
+        if entities and keywords:
+            for entity_text in list(entities.keys()):
+                entity_lower = entity_text.lower()
+
+                # Boost if entity matches or is substring of top 3 keywords
+                for i, keyword in enumerate(keywords[:3]):
+                    keyword_lower = keyword.lower()
+
+                    # Exact match or entity is part of keyword
+                    if entity_lower == keyword_lower or entity_lower in keyword_lower:
+                        # Higher boost for top keywords (3x for #1, 2x for #2, 1.5x for #3)
+                        boost = 3.0 - (i * 0.5)
+                        entities[entity_text] = int(entities[entity_text] * boost)
+                        break
+
+                    # Keyword is part of entity (e.g., "chat" in "ChatGPT")
+                    if keyword_lower in entity_lower and len(keyword_lower) >= 3:
+                        boost = 2.0 - (i * 0.3)
+                        entities[entity_text] = int(entities[entity_text] * boost)
+                        break
+
+        # Return most relevant named entity (now weighted by keyword relevance)
         if entities:
             top_entity = max(entities.items(), key=lambda x: x[1])[0]
 
