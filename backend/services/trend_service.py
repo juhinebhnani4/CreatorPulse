@@ -270,11 +270,29 @@ class TrendDetectionService(BaseService):
 
         # Extract named entities from cluster texts
         entities = defaultdict(int)
+        month_suffixes = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
         for text in cluster_texts:
             doc = self.nlp(text)
             for ent in doc.ents:
                 if ent.label_ in ['PRODUCT', 'ORG', 'EVENT', 'WORK_OF_ART']:
-                    entities[ent.text] += 1
+                    entity_text = ent.text.strip()
+
+                    # Filter out poor entity names:
+                    # 1. Too short (< 3 chars)
+                    if len(entity_text) < 3:
+                        continue
+
+                    # 2. All uppercase acronyms (< 5 chars) - likely noise
+                    if entity_text.isupper() and len(entity_text) < 5:
+                        continue
+
+                    # 3. Month-ending entities (CompanyJan, CompanyOct, etc.)
+                    if any(entity_text.endswith(month) for month in month_suffixes):
+                        continue
+
+                    entities[entity_text] += 1
 
         # Return most frequent named entity
         if entities:
@@ -356,7 +374,13 @@ class TrendDetectionService(BaseService):
                 kw2 = set(topic2['keywords'])
                 overlap = len(kw1 & kw2) / len(kw1 | kw2)  # Jaccard similarity
 
-                if overlap >= 0.5:  # 50% keyword overlap
+                if overlap >= 0.7:  # 70% keyword overlap (more conservative)
+                    # Log merge decision for debugging
+                    self.logger.debug(
+                        f"Merging topics: '{topic1['topic']}' + '{topic2['topic']}' "
+                        f"(overlap={overlap:.2f}, shared keywords={list(kw1 & kw2)})"
+                    )
+
                     # Merge topic2 into topic1
                     merged_topic['items'].extend(topic2['items'])
                     merged_topic['keywords'] = list(kw1 | kw2)[:5]  # Union of keywords

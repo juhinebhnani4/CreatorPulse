@@ -1264,25 +1264,20 @@ class SupabaseManager:
         limit: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        Get active trends using database function.
+        Get active trends for workspace.
+
+        Note: Uses direct table query instead of RPC to ensure all required fields
+        (workspace_id, created_at, updated_at) are returned for Pydantic validation.
 
         Args:
             workspace_id: Workspace ID
             limit: Maximum trends to return
 
         Returns:
-            List of active trends
+            List of active trends with all required fields
         """
-        try:
-            result = self.service_client.rpc('get_active_trends', {
-                'workspace_uuid': workspace_id,
-                'limit_count': limit
-            }).execute()
-
-            return result.data if result.data else []
-        except Exception:
-            # Fallback to regular query
-            return self.list_trends(workspace_id, is_active=True, limit=limit)
+        # Direct query ensures all fields returned (avoids RPC incomplete data issue)
+        return self.list_trends(workspace_id, is_active=True, limit=limit)
 
     def get_trend_history(
         self,
