@@ -127,9 +127,12 @@ class DeliveryService:
             failed_count = 0
             errors = []
 
-            for subscriber in subscribers:
+            for i, subscriber in enumerate(subscribers, 1):
                 try:
+                    print(f"\n📨 Sending to subscriber {i}/{len(subscribers)}: {subscriber['email']}")
+
                     # Add tracking pixel and click tracking to HTML (personalized per recipient)
+                    print(f"   → Adding tracking to HTML...")
                     tracked_html = self.tracking_service.add_tracking_to_html(
                         html_content=newsletter['content_html'],
                         newsletter_id=newsletter_id,
@@ -139,6 +142,7 @@ class DeliveryService:
                     )
 
                     # Add unsubscribe link (CAN-SPAM compliance)
+                    print(f"   → Adding unsubscribe link...")
                     tracked_html = self.tracking_service.add_unsubscribe_link(
                         html_content=tracked_html,
                         workspace_id=workspace_id,
@@ -149,6 +153,7 @@ class DeliveryService:
                     # For now, unsubscribe link in footer is sufficient for CAN-SPAM compliance
 
                     # Send email with tracked HTML
+                    print(f"   → Calling email_sender.send_newsletter()...")
                     success = self.email_sender.send_newsletter(
                         to_email=subscriber['email'],
                         subject=newsletter.get('subject_line') or newsletter['title'],
@@ -157,6 +162,8 @@ class DeliveryService:
                     )
 
                     if success:
+                        print(f"   ✅ Email sent successfully to {subscriber['email']}")
+
                         # Record 'sent' event in analytics
                         await self.analytics_service.record_event(
                             workspace_id=workspace_id,
@@ -182,14 +189,17 @@ class DeliveryService:
                             'last_sent_at': datetime.now().isoformat()
                         })
                     else:
+                        print(f"   ❌ email_sender.send_newsletter() returned False for {subscriber['email']}")
                         failed_count += 1
-                        errors.append(f"Failed to send to {subscriber['email']}")
+                        errors.append(f"Failed to send to {subscriber['email']}: SMTP returned False")
 
                 except Exception as e:
                     failed_count += 1
                     error_msg = f"Error sending to {subscriber['email']}: {str(e)}"
                     errors.append(error_msg)
-                    print(f"[DeliveryService] {error_msg}")
+                    print(f"   ❌ Exception: {error_msg}")
+                    import traceback
+                    traceback.print_exc()
 
             # Update delivery record
             self.db.update_delivery(delivery['id'], {
