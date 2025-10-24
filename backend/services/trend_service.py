@@ -7,10 +7,11 @@ and cross-source validation.
 
 import re
 from typing import List, Dict, Any, Optional, Tuple
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from uuid import UUID
 import numpy as np
+import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from backend.models.trend import (
@@ -39,6 +40,13 @@ class TrendDetectionService(BaseService):
             ngram_range=TrendConstants.TFIDF_NGRAM_RANGE,
             min_df=TrendConstants.TFIDF_MIN_DF
         )
+
+        # Load spaCy for named entity recognition
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            self.logger.warning("spaCy model not found. Install with: python -m spacy download en_core_web_sm")
+            self.nlp = None
 
     @handle_service_errors(default_return=([], {}), log_errors=True)
     async def detect_trends(
@@ -84,8 +92,8 @@ class TrendDetectionService(BaseService):
                 "message": "Insufficient content for trend detection (minimum 5 items required)"
             }
 
-        # Get historical content for velocity calculation
-        historical_cutoff = cutoff_date - timedelta(days=days_back)
+        # Get historical content for velocity calculation (30-day baseline)
+        historical_cutoff = cutoff_date - timedelta(days=30)  # CHANGED: 30 days for better baseline
         historical_items = self._get_recent_content(
             str(workspace_id),
             historical_cutoff,
@@ -106,8 +114,11 @@ class TrendDetectionService(BaseService):
         # Stage 3: Cross-source validation
         validated_topics = self._validate_cross_source(topics_with_velocity)
 
+        # Stage 3.5: Merge similar topics (NEW)
+        merged_topics = self._merge_similar_topics(validated_topics)
+
         # Stage 4: Score and rank
-        scored_trends = self._score_trends(validated_topics)
+        scored_trends = self._score_trends(merged_topics)
 
         # Stage 5: Generate explanations
         trends_data = self._generate_explanations(scored_trends, workspace_id)
@@ -165,7 +176,12 @@ class TrendDetectionService(BaseService):
 
     def _extract_topics(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Extract topics using TF-IDF + K-means clustering.
+        Extract topics using TF-IDF + K-means clustering + NER.
+
+        Improvements:
+        1. Named entity recognition for proper nouns
+        2. N-gram based topic naming (prefer bigrams/trigrams)
+        3. Recency boost for items in last 24 hours
 
         Args:
             items: Content items
@@ -188,7 +204,7 @@ class TrendDetectionService(BaseService):
             # TF-IDF vectorization
             tfidf_matrix = self.vectorizer.fit_transform(texts)
 
-            # K-means clustering (5-10 clusters depending on data size)
+            # K-means clustering
             n_clusters = min(10, max(3, len(items) // 10))
             kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
             clusters = kmeans.fit_predict(tfidf_matrix)
@@ -199,6 +215,7 @@ class TrendDetectionService(BaseService):
 
             for cluster_id in range(n_clusters):
                 cluster_items = [items[i] for i in range(len(items)) if clusters[i] == cluster_id]
+                cluster_texts = [texts[i] for i in range(len(items)) if clusters[i] == cluster_id]
 
                 if len(cluster_items) < 2:
                     continue
@@ -208,21 +225,155 @@ class TrendDetectionService(BaseService):
                 top_indices = cluster_center.argsort()[-10:][::-1]
                 keywords = [feature_names[i] for i in top_indices]
 
-                # Main topic is the top keyword
-                topic_name = keywords[0].replace('_', ' ').title()
+                # NEW: Extract named entities if spaCy available
+                topic_name = self._extract_topic_name(cluster_texts, keywords)
+
+                # NEW: Calculate recency boost
+                recency_boost = self._calculate_recency_boost(cluster_items)
 
                 topics.append({
                     'topic': topic_name,
                     'keywords': keywords[:5],
                     'items': cluster_items,
-                    'cluster_id': cluster_id
+                    'cluster_id': cluster_id,
+                    'recency_boost': recency_boost  # NEW
                 })
 
             return topics
 
         except Exception as e:
-            print(f"Error in topic extraction: {e}")
+            self.logger.error(f"Error in topic extraction: {e}")
             return []
+
+    def _extract_topic_name(self, cluster_texts: List[str], keywords: List[str]) -> str:
+        """
+        Extract meaningful topic name using NER and n-grams.
+
+        Priority:
+        1. Named entities (ChatGPT, Atlas, etc.)
+        2. Longest common n-gram from keywords
+        3. Fallback to top keyword
+
+        Args:
+            cluster_texts: List of text strings from the cluster
+            keywords: List of TF-IDF keywords for the cluster
+
+        Returns:
+            Topic name string
+        """
+        if not self.nlp:
+            # Fallback: Use longest n-gram from keywords
+            ngrams = [kw for kw in keywords if ' ' in kw]
+            if ngrams:
+                return ngrams[0].replace('_', ' ').title()
+            return keywords[0].replace('_', ' ').title()
+
+        # Extract named entities from cluster texts
+        entities = defaultdict(int)
+        for text in cluster_texts:
+            doc = self.nlp(text)
+            for ent in doc.ents:
+                if ent.label_ in ['PRODUCT', 'ORG', 'EVENT', 'WORK_OF_ART']:
+                    entities[ent.text] += 1
+
+        # Return most frequent named entity
+        if entities:
+            top_entity = max(entities.items(), key=lambda x: x[1])[0]
+            return top_entity
+
+        # Fallback to n-grams
+        ngrams = [kw for kw in keywords if ' ' in kw]
+        if ngrams:
+            # Prefer longer n-grams
+            longest_ngram = max(ngrams, key=lambda x: len(x.split()))
+            return longest_ngram.replace('_', ' ').title()
+
+        # Final fallback
+        return keywords[0].replace('_', ' ').title()
+
+    def _calculate_recency_boost(self, cluster_items: List[Dict[str, Any]]) -> float:
+        """
+        Calculate recency boost for topics mentioned in last 24 hours.
+
+        Args:
+            cluster_items: List of content items in the cluster
+
+        Returns:
+            Float between 0.0 and 0.3 (max 30% boost)
+        """
+        now = datetime.now()
+        recent_threshold = now - timedelta(hours=24)
+
+        recent_count = 0
+        for item in cluster_items:
+            created_at = item.get('created_at')
+            if created_at:
+                try:
+                    item_time = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    if item_time >= recent_threshold:
+                        recent_count += 1
+                except:
+                    pass
+
+        # Calculate boost: 0-30% based on percentage of recent items
+        if len(cluster_items) == 0:
+            return 0.0
+
+        recent_percentage = recent_count / len(cluster_items)
+        return min(recent_percentage * 0.3, 0.3)  # Cap at 30%
+
+    def _merge_similar_topics(self, topics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Merge topics with >50% keyword overlap.
+
+        Example: "Ai" and "Chatgpt" both have keywords ["atlas", "opened"]
+        → Merge into single topic "ChatGPT Atlas"
+
+        Args:
+            topics: List of topic dictionaries
+
+        Returns:
+            Deduplicated list of topics
+        """
+        if len(topics) <= 1:
+            return topics
+
+        merged = []
+        used = set()
+
+        for i, topic1 in enumerate(topics):
+            if i in used:
+                continue
+
+            kw1 = set(topic1['keywords'])
+            merged_topic = topic1.copy()
+
+            # Find similar topics to merge
+            for j, topic2 in enumerate(topics[i+1:], start=i+1):
+                if j in used:
+                    continue
+
+                kw2 = set(topic2['keywords'])
+                overlap = len(kw1 & kw2) / len(kw1 | kw2)  # Jaccard similarity
+
+                if overlap >= 0.5:  # 50% keyword overlap
+                    # Merge topic2 into topic1
+                    merged_topic['items'].extend(topic2['items'])
+                    merged_topic['keywords'] = list(kw1 | kw2)[:5]  # Union of keywords
+                    merged_topic['mention_count'] += topic2['mention_count']
+                    merged_topic['sources'] = list(set(merged_topic['sources'] + topic2['sources']))
+                    merged_topic['source_count'] = len(merged_topic['sources'])
+
+                    # Use topic name from higher velocity topic
+                    if topic2.get('velocity', 0) > topic1.get('velocity', 0):
+                        merged_topic['topic'] = topic2['topic']
+
+                    used.add(j)
+
+            merged.append(merged_topic)
+            used.add(i)
+
+        return merged
 
     def _calculate_velocity(
         self,
@@ -302,6 +453,12 @@ class TrendDetectionService(BaseService):
         """
         Score trends based on multiple factors.
 
+        Weights:
+        - Velocity: 60% (spikes matter most)
+        - Mentions: 20% (volume matters less)
+        - Sources: 20% (diversity still important)
+        + Recency boost: up to 30% extra
+
         Args:
             topics: Topics to score
 
@@ -311,17 +468,24 @@ class TrendDetectionService(BaseService):
         for topic in topics:
             score = 0.0
 
-            # Factor 1: Mention count (30% weight)
+            # Factor 1: Mention count (20% weight) - REDUCED
             mention_score = min(topic['mention_count'] / 20, 1.0)
-            score += mention_score * 0.3
+            score += mention_score * TrendConstants.MENTION_SCORE_WEIGHT  # 0.2
 
-            # Factor 2: Velocity (40% weight)
+            # Factor 2: Velocity (60% weight) - INCREASED
             velocity_score = min(topic.get('velocity', 0) / 100.0, 1.0)
-            score += velocity_score * 0.4
+            score += velocity_score * TrendConstants.VELOCITY_SCORE_WEIGHT  # 0.6
 
-            # Factor 3: Source diversity (30% weight)
+            # Factor 3: Source diversity (20% weight) - REDUCED
             source_score = min(topic['source_count'] / 4, 1.0)
-            score += source_score * 0.3
+            score += source_score * TrendConstants.SOURCE_DIVERSITY_WEIGHT  # 0.2
+
+            # Factor 4: Recency boost (up to 30% extra) - NEW
+            recency_boost = topic.get('recency_boost', 0.0)
+            score += recency_boost
+
+            # Cap total score at 1.0
+            score = min(score, 1.0)
 
             topic['strength_score'] = score
 
