@@ -55,6 +55,7 @@ export default function DashboardPage() {
     latestNewsletter,
     subscriberCount,
     analyticsData,
+    activities,
     hasSources,
     isLoading,
     workspaceId,
