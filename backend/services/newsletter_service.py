@@ -99,7 +99,26 @@ class NewsletterService:
 
         Returns:
             Dict with generated newsletter data
+
+        Raises:
+            ValueError: If parameters are invalid
         """
+        # Validate inputs
+        if not title or not title.strip():
+            raise ValueError("title cannot be empty")
+
+        if max_items <= 0 or max_items > 100:
+            raise ValueError("max_items must be between 1 and 100")
+
+        if days_back <= 0 or days_back > 365:
+            raise ValueError("days_back must be between 1 and 365")
+
+        if not 0.0 <= temperature <= 2.0:
+            raise ValueError("temperature must be between 0.0 and 2.0")
+
+        if tone and tone not in ['professional', 'casual', 'technical', 'friendly', 'humorous', 'authoritative', 'conversational']:
+            raise ValueError(f"Invalid tone '{tone}'. Must be one of: professional, casual, technical, friendly, humorous, authoritative, conversational")
+
         # Verify user has access to workspace
         workspace = self.supabase.get_workspace(workspace_id)
         if not workspace:

@@ -99,6 +99,10 @@ class ContentConstants:
     TWITTER_BATCH_SIZE: int = int(os.getenv("TWITTER_BATCH_SIZE", "5"))  # Max concurrent requests per batch
     TWITTER_RATE_LIMIT_PAUSE_SECONDS: int = int(os.getenv("TWITTER_RATE_LIMIT_PAUSE", "3"))  # Pause between batches
 
+    # Concurrent scraping settings
+    SCRAPE_TIMEOUT_SECONDS: int = int(os.getenv("SCRAPE_TIMEOUT_SECONDS", "60"))  # Timeout per source
+    SCRAPE_CONCURRENT: bool = os.getenv("SCRAPE_CONCURRENT", "true").lower() == "true"  # Enable/disable concurrency
+
 
 class HistoricalConstants:
     """Constants for historical data service."""

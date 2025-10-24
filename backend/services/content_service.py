@@ -2,9 +2,10 @@
 Content service - Business logic for content scraping and management.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import sys
+import asyncio
 from pathlib import Path
 
 # Add project root to path
@@ -275,28 +276,63 @@ class ContentService:
         all_items: List[ContentItem] = []
         results = {}
 
-        for source_type, merged_config in merged_configs.items():
-            try:
-                # Use override limit or config limit
-                limit = limit_per_source or merged_config.get('limit', 10)
+        if ContentConstants.SCRAPE_CONCURRENT:
+            # Concurrent scraping (3-5x faster)
+            print(f"[ContentService] Scraping {len(merged_configs)} sources concurrently...")
 
-                # Scrape based on source type
-                items = await self._scrape_source(source_type, merged_config, limit)
+            scrape_tasks = [
+                self._scrape_source_safe(source_type, config, limit_per_source or config.get('limit', 10))
+                for source_type, config in merged_configs.items()
+            ]
 
-                # Store results
-                results[source_type] = {
-                    'success': True,
-                    'items_count': len(items),
-                    'items': items
-                }
-                all_items.extend(items)
+            # Execute all scrapes in parallel
+            results_raw = await asyncio.gather(*scrape_tasks, return_exceptions=True)
 
-            except Exception as e:
-                results[source_type] = {
-                    'success': False,
-                    'error': str(e),
-                    'items_count': 0
-                }
+            # Process results
+            for i, (source_type, _) in enumerate(merged_configs.items()):
+                result = results_raw[i]
+
+                if isinstance(result, Exception):
+                    results[source_type] = {
+                        'success': False,
+                        'error': f"Unexpected error: {result}",
+                        'items_count': 0
+                    }
+                else:
+                    items, success, error = result
+                    results[source_type] = {
+                        'success': success,
+                        'items_count': len(items),
+                        'items': items,
+                        'error': error
+                    }
+                    all_items.extend(items)
+        else:
+            # Sequential scraping (backward compatibility / debugging)
+            print(f"[ContentService] Scraping {len(merged_configs)} sources sequentially (SCRAPE_CONCURRENT=false)...")
+
+            for source_type, merged_config in merged_configs.items():
+                try:
+                    # Use override limit or config limit
+                    limit = limit_per_source or merged_config.get('limit', 10)
+
+                    # Scrape based on source type
+                    items = await self._scrape_source(source_type, merged_config, limit)
+
+                    # Store results
+                    results[source_type] = {
+                        'success': True,
+                        'items_count': len(items),
+                        'items': items
+                    }
+                    all_items.extend(items)
+
+                except Exception as e:
+                    results[source_type] = {
+                        'success': False,
+                        'error': str(e),
+                        'items_count': 0
+                    }
 
         # Save all items to database
         if all_items:
@@ -333,6 +369,45 @@ class ContentService:
             'results': results,
             'scraped_at': datetime.now().isoformat()
         }
+
+    async def _scrape_source_safe(
+        self,
+        source: str,
+        config: Dict[str, Any],
+        limit: int
+    ) -> Tuple[List[ContentItem], bool, Optional[str]]:
+        """
+        Scrape source with timeout and error handling.
+
+        Args:
+            source: Source type (reddit, rss, youtube, x, blog)
+            config: Source configuration
+            limit: Max items to scrape
+
+        Returns:
+            Tuple of (items, success, error_message)
+        """
+        try:
+            # Use asyncio.timeout (Python 3.11+) or asyncio.wait_for (fallback)
+            try:
+                async with asyncio.timeout(ContentConstants.SCRAPE_TIMEOUT_SECONDS):
+                    items = await self._scrape_source(source, config, limit)
+                    return items, True, None
+            except AttributeError:
+                # Fallback for Python < 3.11
+                items = await asyncio.wait_for(
+                    self._scrape_source(source, config, limit),
+                    timeout=ContentConstants.SCRAPE_TIMEOUT_SECONDS
+                )
+                return items, True, None
+        except asyncio.TimeoutError:
+            error_msg = f"Scraping {source} timed out after {ContentConstants.SCRAPE_TIMEOUT_SECONDS}s"
+            print(f"[ContentService] {error_msg}")
+            return [], False, error_msg
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[ContentService] Error scraping {source}: {error_msg}")
+            return [], False, error_msg
 
     async def _scrape_source(
         self,
