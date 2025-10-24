@@ -1,0 +1,366 @@
+# BULK SOURCES - DIRECT PASTE FORMAT
+# Copy sections below and paste directly into your UI
+
+================================================================================
+SECTION 1: REDDIT SUBREDDITS (Copy all subreddit names below)
+================================================================================
+
+AI & Machine Learning (6 subreddits):
+MachineLearning
+artificial
+LocalLLaMA
+OpenAI
+StableDiffusion
+LangChain
+
+Web Development (7 subreddits):
+programming
+webdev
+Python
+javascript
+reactjs
+nextjs
+docker
+
+Business & Startups (4 subreddits):
+Entrepreneur
+startups
+SaaS
+productivity
+
+General Tech News (3 subreddits):
+technology
+gadgets
+Futurology
+
+ALL 20 REDDIT SUBREDDITS (copy this entire list):
+MachineLearning
+artificial
+LocalLLaMA
+OpenAI
+StableDiffusion
+LangChain
+programming
+webdev
+Python
+javascript
+reactjs
+nextjs
+docker
+Entrepreneur
+startups
+SaaS
+productivity
+technology
+gadgets
+Futurology
+
+
+================================================================================
+SECTION 2: YOUTUBE CHANNEL IDs (Copy channel IDs below)
+================================================================================
+
+AI & Tech Creators (10 channels):
+UCbfYPyITQ-7l4upoX8nvctg
+UCYO_jab_esuFRV4b17AJtAw
+UC295-Dw_tDNtZXFeAPAW6Aw
+UCXZCJLdBC09xxGZ6gcdrc6A
+UCJ0-OtVpF0wOKEqT2Z1HEtA
+UC_x5XG1OV2P6uZZ5FSM9Ttw
+UCsBjURrPoezykLs9EqgamOA
+UCCezIgC97PvUuR4_gbFUs5g
+UCsooa4yRKGN_zEE8iknghZA
+UCzL_0nIe8B4-7ShhVPfJkgw
+
+Channel Names (for reference):
+1. Two Minute Papers (AI Research)
+2. 3Blue1Brown (Math/AI Explainers)
+3. Siraj Raval (AI Projects)
+4. Sentdex (Python/ML Tutorials)
+5. CodeEmporium (Deep Learning)
+6. Google for Developers (Google Tech)
+7. Fireship (Web Dev - Short Videos)
+8. Corey Schafer (Python Tutorials)
+9. TechWorld with Nana (DevOps)
+10. Cursor (AI Coding Tools)
+
+Business & Productivity (5 channels):
+UC2D2CMWXMOVWx7giW1n3LIg
+UCfzlCWGWYyIQ0aLC5w48gBQ
+UC7cs8q-gJRlGwj4A8OmCmXg
+UCJbPGzawDH1njbqV-D5HqKw
+UC1fLEeYICmo3O9cUsqIi7HA
+
+Channel Names (for reference):
+11. Y Combinator (Startups)
+12. Techstars (Startup Advice)
+13. Ali Abdaal (Productivity)
+14. The Futur (Creative Business)
+15. Matt D'Avella (Minimalism/Productivity)
+
+ALL 15 YOUTUBE CHANNEL IDs (copy this entire list):
+UCbfYPyITQ-7l4upoX8nvctg
+UCYO_jab_esuFRV4b17AJtAw
+UC295-Dw_tDNtZXFeAPAW6Aw
+UCXZCJLdBC09xxGZ6gcdrc6A
+UCJ0-OtVpF0wOKEqT2Z1HEtA
+UC_x5XG1OV2P6uZZ5FSM9Ttw
+UCsBjURrPoezykLs9EqgamOA
+UCCezIgC97PvUuR4_gbFUs5g
+UCsooa4yRKGN_zEE8iknghZA
+UCzL_0nIe8B4-7ShhVPfJkgw
+UC2D2CMWXMOVWx7giW1n3LIg
+UCfzlCWGWYyIQ0aLC5w48gBQ
+UC7cs8q-gJRlGwj4A8OmCmXg
+UCJbPGzawDH1njbqV-D5HqKw
+UC1fLEeYICmo3O9cUsqIi7HA
+
+
+================================================================================
+SECTION 3: RSS FEED URLs (Copy feed URLs below)
+================================================================================
+
+AI Research & Industry (5 feeds):
+https://openai.com/blog/rss/
+https://blog.google/technology/ai/rss/
+https://www.anthropic.com/news/rss
+https://huggingface.co/blog/feed.xml
+https://www.deepmind.com/blog/rss.xml
+
+Tech News & Analysis (5 feeds):
+https://techcrunch.com/feed/
+https://www.theverge.com/rss/index.xml
+https://arstechnica.com/feed/
+https://news.ycombinator.com/rss
+https://www.wired.com/feed/rss
+
+ALL 10 RSS FEEDS (copy this entire list):
+https://openai.com/blog/rss/
+https://blog.google/technology/ai/rss/
+https://www.anthropic.com/news/rss
+https://huggingface.co/blog/feed.xml
+https://www.deepmind.com/blog/rss.xml
+https://techcrunch.com/feed/
+https://www.theverge.com/rss/index.xml
+https://arstechnica.com/feed/
+https://news.ycombinator.com/rss
+https://www.wired.com/feed/rss
+
+
+================================================================================
+SECTION 4: RECOMMENDED STARTER PACKS (Copy sections as needed)
+================================================================================
+
+STARTER PACK 1: AI/ML Focus (15 sources)
+-----------------------------------------
+Reddit (5):
+MachineLearning
+artificial
+LocalLLaMA
+OpenAI
+LangChain
+
+YouTube (5):
+UCbfYPyITQ-7l4upoX8nvctg
+UCYO_jab_esuFRV4b17AJtAw
+UC295-Dw_tDNtZXFeAPAW6Aw
+UCXZCJLdBC09xxGZ6gcdrc6A
+UCJ0-OtVpF0wOKEqT2Z1HEtA
+
+RSS (5):
+https://openai.com/blog/rss/
+https://blog.google/technology/ai/rss/
+https://www.anthropic.com/news/rss
+https://huggingface.co/blog/feed.xml
+https://www.deepmind.com/blog/rss.xml
+
+
+STARTER PACK 2: Web Development Focus (20 sources)
+---------------------------------------------------
+Reddit (7):
+programming
+webdev
+reactjs
+nextjs
+javascript
+Python
+docker
+
+YouTube (8):
+UC_x5XG1OV2P6uZZ5FSM9Ttw
+UCsBjURrPoezykLs9EqgamOA
+UCCezIgC97PvUuR4_gbFUs5g
+UCsooa4yRKGN_zEE8iknghZA
+UCXZCJLdBC09xxGZ6gcdrc6A
+UCJ0-OtVpF0wOKEqT2Z1HEtA
+UCbfYPyITQ-7l4upoX8nvctg
+UC295-Dw_tDNtZXFeAPAW6Aw
+
+RSS (5):
+https://techcrunch.com/feed/
+https://www.theverge.com/rss/index.xml
+https://arstechnica.com/feed/
+https://news.ycombinator.com/rss
+https://www.wired.com/feed/rss
+
+
+STARTER PACK 3: Startup/Business Focus (14 sources)
+----------------------------------------------------
+Reddit (4):
+Entrepreneur
+startups
+SaaS
+productivity
+
+YouTube (5):
+UC2D2CMWXMOVWx7giW1n3LIg
+UCfzlCWGWYyIQ0aLC5w48gBQ
+UC7cs8q-gJRlGwj4A8OmCmXg
+UCJbPGzawDH1njbqV-D5HqKw
+UC1fLEeYICmo3O9cUsqIi7HA
+
+RSS (5):
+https://techcrunch.com/feed/
+https://www.theverge.com/rss/index.xml
+https://arstechnica.com/feed/
+https://news.ycombinator.com/rss
+https://www.wired.com/feed/rss
+
+
+STARTER PACK 4: Maximum Diversity (45 sources - ALL OF THE ABOVE)
+------------------------------------------------------------------
+Reddit (20 subreddits):
+MachineLearning
+artificial
+LocalLLaMA
+OpenAI
+StableDiffusion
+LangChain
+programming
+webdev
+Python
+javascript
+reactjs
+nextjs
+docker
+Entrepreneur
+startups
+SaaS
+productivity
+technology
+gadgets
+Futurology
+
+YouTube (15 channels):
+UCbfYPyITQ-7l4upoX8nvctg
+UCYO_jab_esuFRV4b17AJtAw
+UC295-Dw_tDNtZXFeAPAW6Aw
+UCXZCJLdBC09xxGZ6gcdrc6A
+UCJ0-OtVpF0wOKEqT2Z1HEtA
+UC_x5XG1OV2P6uZZ5FSM9Ttw
+UCsBjURrPoezykLs9EqgamOA
+UCCezIgC97PvUuR4_gbFUs5g
+UCsooa4yRKGN_zEE8iknghZA
+UCzL_0nIe8B4-7ShhVPfJkgw
+UC2D2CMWXMOVWx7giW1n3LIg
+UCfzlCWGWYyIQ0aLC5w48gBQ
+UC7cs8q-gJRlGwj4A8OmCmXg
+UCJbPGzawDH1njbqV-D5HqKw
+UC1fLEeYICmo3O9cUsqIi7HA
+
+RSS (10 feeds):
+https://openai.com/blog/rss/
+https://blog.google/technology/ai/rss/
+https://www.anthropic.com/news/rss
+https://huggingface.co/blog/feed.xml
+https://www.deepmind.com/blog/rss.xml
+https://techcrunch.com/feed/
+https://www.theverge.com/rss/index.xml
+https://arstechnica.com/feed/
+https://news.ycombinator.com/rss
+https://www.wired.com/feed/rss
+
+
+================================================================================
+HOW TO USE THIS FILE (Your Tab-Based UI)
+================================================================================
+
+Your UI has TABS for each source type. Here's how to bulk add sources:
+
+METHOD 1: Quick Copy-Paste (Fastest)
+-------------------------------------
+1. Go to: http://localhost:3000/app/settings → Click "Sources" in sidebar
+2. Pick a tab (Reddit / RSS / Twitter / YouTube / Blogs)
+3. Copy ONE LINE at a time from sections above
+4. Paste into the input field
+5. Press ENTER or click "Add"
+6. Repeat for each source
+7. Click "Save Sources" button at bottom when done
+
+METHOD 2: Use Bulk Paste Script (Recommended for 20+ sources)
+--------------------------------------------------------------
+Instead of manually adding 45 sources one by one, use the API method:
+
+1. Open Terminal/PowerShell
+2. Run these commands:
+
+   # Get your auth token (login)
+   curl -X POST http://localhost:8000/api/v1/auth/login \
+     -H "Content-Type: application/json" \
+     -d "{\"email\": \"your@email.com\", \"password\": \"yourpassword\"}"
+
+   # Copy the access_token from response
+   # Set environment variables
+   export TOKEN="paste-your-token-here"
+   export WORKSPACE_ID="paste-your-workspace-id-here"
+
+   # Save one of the configs from SECTION 4 above to a file
+   # Then update workspace config:
+   curl -X PUT http://localhost:8000/api/v1/workspaces/$WORKSPACE_ID/config \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d @config.json
+
+3. Refresh your UI page to see all sources added
+
+EXAMPLE: Adding 5 Reddit Subreddits via UI
+-------------------------------------------
+1. Go to /app/settings → Sources → Reddit tab
+2. Copy "MachineLearning" from SECTION 1 above
+3. Paste into "Start typing subreddit name..." field
+4. Press ENTER (it adds as a badge)
+5. Repeat for: artificial, LocalLLaMA, OpenAI, LangChain
+6. Click "Save Sources" at bottom
+7. Done! You'll see 5 badges showing your subreddits
+
+================================================================================
+RECOMMENDED SETTINGS
+================================================================================
+
+Reddit Settings:
+- Sort: hot
+- Limit: 25 posts per subreddit
+- Time Filter: all
+
+YouTube Settings:
+- Max Results: 10 videos per channel
+- Order: date (latest first)
+
+RSS Settings:
+- No additional settings needed (auto-fetch latest)
+
+Scraping Schedule:
+- Reddit: Every 6 hours (4x daily)
+- YouTube: Once daily (9 AM UTC)
+- RSS: Once weekly (Monday 9 AM UTC)
+
+================================================================================
+NOTES
+================================================================================
+
+- Total sources: 45 (20 Reddit + 15 YouTube + 10 RSS)
+- Expected content: 500+ Reddit posts/day, 15+ YouTube videos/day, 10-20 RSS articles/week
+- Use recency boost to prioritize fresh content (< 6 hours old)
+- Adjust scraping frequency based on your newsletter cadence (daily vs weekly)
+
+================================================================================

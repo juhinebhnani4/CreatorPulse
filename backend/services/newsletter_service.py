@@ -313,20 +313,30 @@ class NewsletterService:
 
     def _apply_freshness_decay(self, content_items_dicts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Apply time-based score decay to prioritize recent content.
+        Apply time-based recency boost/decay to prioritize recent content.
 
-        Industry standard: Quality + recency hybrid scoring.
-        Older content gets exponentially penalized to prevent stale content domination.
+        Industry standard: Quality + recency hybrid scoring used by Reddit, Hacker News, Feedly.
+
+        Key improvement: Uses HOURS instead of days for granular ranking.
+        - Recent content gets BOOSTED (>1.0x) to compete with high-scoring older content
+        - Old content gets DECAYED (<1.0x) to prevent stale domination
+
+        Multipliers:
+        - < 1 hour:   3.0x boost  (Breaking news, trending)
+        - 1-6 hours:  2.0x boost  (Recent, still fresh)
+        - 6-24 hours: 1.0x        (Current, no change)
+        - 1-7 days:   0.5x decay  (Aging content)
+        - > 7 days:   0.1x decay  (Stale content)
 
         Args:
             content_items_dicts: List of content items with scores
 
         Returns:
-            Same list with adjusted scores based on age
+            Same list with adjusted scores based on recency
         """
         from datetime import datetime, timezone
 
-        print(f"[FreshnessDecay] FUNCTION CALLED - Processing {len(content_items_dicts)} items")
+        print(f"[RecencyBoost] Processing {len(content_items_dicts)} items")
 
         now = datetime.now(timezone.utc)
 
@@ -338,62 +348,60 @@ class NewsletterService:
             scraped_at_str = item.get('scraped_at')
             if not scraped_at_str:
                 items_skipped += 1
-                print(f"[FreshnessDecay] SKIPPED - Item missing scraped_at: {item.get('id', 'unknown')}")
+                print(f"[RecencyBoost] SKIPPED - Item missing scraped_at: {item.get('id', 'unknown')}")
                 continue
 
             try:
                 # Handle both ISO format with and without timezone
                 scraped_at = datetime.fromisoformat(scraped_at_str.replace('Z', '+00:00'))
-                age_days = (now - scraped_at).days
+                age_hours = (now - scraped_at).total_seconds() / 3600
 
-                # Calculate decay multiplier (exponential decay curve)
-                # Balances quality vs recency - high-quality old content can still rank
-                if age_days <= 3:
-                    decay_multiplier = 1.0      # 100% - Fresh content (0-3 days)
-                elif age_days <= 7:
-                    decay_multiplier = 0.7      # 70% - Recent content (4-7 days)
-                elif age_days <= 14:
-                    decay_multiplier = 0.4      # 40% - Week-old content (8-14 days)
-                elif age_days <= 30:
-                    decay_multiplier = 0.15     # 15% - Month-old content (15-30 days)
+                # Calculate recency multiplier (boost recent, decay old)
+                # This allows fresh content to compete with viral older content
+                if age_hours < 1:
+                    multiplier = 3.0        # 300% - Breaking/trending (< 1 hour)
+                elif age_hours < 6:
+                    multiplier = 2.0        # 200% - Recent content (1-6 hours)
+                elif age_hours < 24:
+                    multiplier = 1.0        # 100% - Current content (6-24 hours)
+                elif age_hours < 168:  # 7 days
+                    multiplier = 0.5        # 50% - Aging content (1-7 days)
                 else:
-                    decay_multiplier = 0.05     # 5% - Stale content (30+ days)
+                    multiplier = 0.1        # 10% - Stale content (> 7 days)
 
-                # Apply decay to score
+                # Apply multiplier to score
                 original_score = item.get('score', 0)
-                decayed_score = int(original_score * decay_multiplier)
+                boosted_score = int(original_score * multiplier)
 
-                # Store for debugging and future config
-                item['freshness_age_days'] = age_days
-                item['freshness_decay'] = decay_multiplier
-                item['score_before_decay'] = original_score
-                item['score'] = decayed_score
+                # Store for debugging
+                item['recency_age_hours'] = round(age_hours, 1)
+                item['recency_multiplier'] = multiplier
+                item['score_before_recency'] = original_score
+                item['score'] = boosted_score
 
                 items_processed += 1
 
-                # Log decay calculation (truncate title for readability)
-                # Use try/except to prevent Unicode errors from breaking business logic
+                # Log boost/decay calculation
                 try:
-                    title = item.get('title', 'Untitled')[:50]
-                    # Replace non-ASCII characters to avoid Windows console encoding issues
+                    title = item.get('title', 'Untitled')[:45]
                     safe_title = title.encode('ascii', errors='replace').decode('ascii')
-                    print(f"[FreshnessDecay] '{safe_title}' - Age: {age_days}d, Decay: {decay_multiplier}, Score: {original_score} -> {decayed_score}")
+                    boost_type = "BOOST" if multiplier > 1.0 else "DECAY" if multiplier < 1.0 else "NEUTRAL"
+                    print(f"[RecencyBoost] [{boost_type}] '{safe_title}' - {age_hours:.1f}h old, {multiplier}x, Score: {original_score} → {boosted_score}")
                 except Exception:
-                    # Silent fallback - logging should never break the pipeline
                     pass
 
             except Exception as e:
                 items_skipped += 1
-                print(f"[FreshnessDecay] WARNING: Failed to parse scraped_at for item {item.get('id', 'unknown')}: {e}")
+                print(f"[RecencyBoost] WARNING: Failed to parse scraped_at for item {item.get('id', 'unknown')}: {e}")
                 continue
 
-        print(f"[FreshnessDecay] SUMMARY - Processed: {items_processed}, Skipped: {items_skipped}, Total: {len(content_items_dicts)}")
+        print(f"[RecencyBoost] SUMMARY - Processed: {items_processed}, Skipped: {items_skipped}, Total: {len(content_items_dicts)}")
 
-        # Remove diagnostic fields before returning (Pydantic ContentItem model doesn't accept extra fields)
+        # Remove diagnostic fields before returning
         for item in content_items_dicts:
-            item.pop('freshness_age_days', None)
-            item.pop('freshness_decay', None)
-            item.pop('score_before_decay', None)
+            item.pop('recency_age_hours', None)
+            item.pop('recency_multiplier', None)
+            item.pop('score_before_recency', None)
 
         return content_items_dicts
 
@@ -434,11 +442,14 @@ class NewsletterService:
         if not content_items:
             raise ValueError(f"No content found in workspace for the last {days_back} days")
 
-        # Exclude items from recently sent newsletters (prevents content repetition)
+        # Exclude items from recently sent newsletters and recent drafts (prevents content repetition)
+        # Industry standard: Long exclusion for sent (30 days), short exclusion for drafts (24 hours)
         excluded_ids = set(self.supabase.get_recently_sent_content_ids(
             workspace_id=workspace_id,
-            days_back=30,  # Exclude items from last 30 days of sent newsletters
-            max_newsletters=3  # Or last 3 newsletters, whichever is more restrictive
+            days_back=30,  # Sent newsletters: Exclude for 30 days
+            max_newsletters=3,  # Or last 3 newsletters per status, whichever is more restrictive
+            include_drafts=True,  # Also exclude draft newsletters
+            draft_cooldown_hours=24  # Drafts: Exclude for 24 hours (allows testing, prevents spam)
         ))
 
         if excluded_ids:
@@ -448,7 +459,7 @@ class NewsletterService:
             original_count = len(content_items)
             content_items = [
                 item for item in content_items
-                if item.id not in excluded_ids
+                if item.metadata.get('id') not in excluded_ids
             ]
             filtered_count = len(content_items)
 
@@ -512,18 +523,18 @@ class NewsletterService:
                     item['original_score'] = item.get('score', 0)
                     item['score'] = int(item.get('score', 0) * NewsletterConstants.TREND_SCORE_BOOST_MULTIPLIER)
 
-        # Apply freshness decay to prioritize recent content (industry standard)
-        print(f"[FreshnessDecay] About to apply decay to {len(content_items_dicts)} items")
+        # Apply recency boost to prioritize recent content (industry standard)
+        print(f"[RecencyBoost] About to apply recency boost to {len(content_items_dicts)} items")
         if content_items_dicts:
             first_item_keys = list(content_items_dicts[0].keys())
             has_scraped_at = 'scraped_at' in first_item_keys
-            print(f"[FreshnessDecay] First item keys: {first_item_keys[:10]}")
-            print(f"[FreshnessDecay] Has 'scraped_at' field: {has_scraped_at}")
+            print(f"[RecencyBoost] First item keys: {first_item_keys[:10]}")
+            print(f"[RecencyBoost] Has 'scraped_at' field: {has_scraped_at}")
             if has_scraped_at:
-                print(f"[FreshnessDecay] scraped_at value: {content_items_dicts[0].get('scraped_at')}")
+                print(f"[RecencyBoost] scraped_at value: {content_items_dicts[0].get('scraped_at')}")
 
         content_items_dicts = self._apply_freshness_decay(content_items_dicts)
-        print(f"[FreshnessDecay] Decay applied, {len(content_items_dicts)} items remain")
+        print(f"[RecencyBoost] Recency boost applied, {len(content_items_dicts)} items remain")
 
         # Re-sort by score after trend boosting and freshness decay
         content_items_dicts.sort(key=lambda x: x.get('score', 0), reverse=True)

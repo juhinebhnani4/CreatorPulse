@@ -243,6 +243,9 @@ class ContentService:
         Returns:
             Dict with scraped content summary
         """
+        # Store workspace_id for use in helper methods (e.g., sort rotation)
+        self._current_workspace_id = workspace_id
+
         # Verify user has access to workspace
         workspace = self.supabase.get_workspace(workspace_id)
         if not workspace:
@@ -339,6 +342,12 @@ class ContentService:
                     }
 
         # Save all items to database
+        print(f"\n{'='*80}")
+        print(f"[Scrape Debug] CONTENT SCRAPING RESULTS")
+        print(f"{'='*80}")
+        print(f"[Scrape] Workspace ID: {workspace_id}")
+        print(f"[Scrape] Total items fetched from sources: {len(all_items)}")
+
         if all_items:
             # Deduplicate items by source_url before saving
             # This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" error
@@ -356,11 +365,27 @@ class ContentService:
                     duplicates_removed += 1
 
             if duplicates_removed > 0:
-                print(f"   Removed {duplicates_removed} duplicate items from batch (same URL scraped by multiple sources)")
+                print(f"[Scrape] Removed {duplicates_removed} duplicate items from batch (same URL scraped by multiple sources)")
 
+            print(f"[Scrape] Attempting to save {len(unique_items)} unique items to database...")
             saved_items = self.supabase.save_content_items(workspace_id, unique_items)
+            print(f"[Scrape] Items successfully saved to database: {len(saved_items)}")
+            print(f"[Scrape] Items skipped (duplicates in DB): {len(unique_items) - len(saved_items)}")
+
+            # Show sample of what was scraped
+            print(f"\n[Scrape] Sample of items attempted to save:")
+            for idx, item in enumerate(unique_items[:5]):
+                status = "✅ SAVED" if idx < len(saved_items) else "⚠️ SKIPPED"
+                print(f"  {idx+1}. [{status}] Source: {item.source:8} | Title: {item.title[:50]:50} | URL: {item.source_url[:60]}")
         else:
             saved_items = []
+            print(f"[Scrape] No items fetched from sources!")
+
+        # Get current total count
+        current_total_result = self.supabase.service_client.table('content_items').select('id', count='exact').eq('workspace_id', workspace_id).execute()
+        current_total = current_total_result.count if hasattr(current_total_result, 'count') else 0
+        print(f"[Scrape] Current total items in database for this workspace: {current_total}")
+        print(f"{'='*80}\n")
 
         return {
             'workspace_id': workspace_id,
@@ -443,6 +468,81 @@ class ContentService:
         else:
             raise ValueError(f"Unknown source: {source}")
 
+    def _get_reddit_sort(self, config: Dict[str, Any]) -> str:
+        """
+        Determine Reddit sort method using time-based rotation with optional override.
+
+        Industry standard: Rotate sorts throughout the day to maximize content diversity.
+        Different sorts return completely different posts, reducing duplicates even when
+        scraping frequently.
+
+        Time-based schedule (default):
+        - Morning (0-6 UTC): 'new' - Fresh overnight content
+        - Midday (6-12 UTC): 'hot' - Trending morning content
+        - Afternoon (12-18 UTC): 'rising' - Emerging discussions
+        - Evening (18-24 UTC): 'top' - Quality content of the day
+
+        Configuration options (optional, in workspace config):
+        1. Manual override: {"sort": "hot"} - Always use specified sort
+        2. Custom rotation: {"sort_rotation": ["hot", "new"]} - Cycle through list
+        3. Disable rotation: {"sort_rotation": "disabled"} - Always use 'hot'
+
+        Args:
+            config: Source config from workspace (may contain sort overrides)
+
+        Returns:
+            Sort method: 'hot', 'new', 'rising', or 'top'
+
+        Examples:
+            >>> _get_reddit_sort({"sort": "new"})  # Manual override
+            'new'
+
+            >>> _get_reddit_sort({"sort_rotation": ["hot", "new", "top"]})  # Custom
+            'new'  # Based on workspace_id hash
+
+            >>> _get_reddit_sort({})  # Default - uses time of day
+            'hot'  # If called between 6-12 UTC
+        """
+        from datetime import datetime
+
+        # Option 1: Manual override (existing behavior - backward compatible)
+        if 'sort' in config:
+            sort = config['sort']
+            print(f"[Reddit Sort] Using manual override: {sort}")
+            return sort
+
+        # Option 2: Disable rotation (opt-out)
+        if config.get('sort_rotation') == 'disabled':
+            print(f"[Reddit Sort] Rotation disabled, using default: hot")
+            return 'hot'
+
+        # Option 3: Custom rotation (advanced users)
+        if 'sort_rotation' in config and isinstance(config['sort_rotation'], list):
+            sorts = config['sort_rotation']
+            if sorts:  # Check list is not empty
+                # Use workspace_id hash for stateless round-robin
+                # This ensures same workspace gets same sort across restarts
+                workspace_id = getattr(self, '_current_workspace_id', 'default')
+                index = int(workspace_id[:8], 16) % len(sorts)
+                sort = sorts[index]
+                print(f"[Reddit Sort] Using custom rotation: {sort} (index {index} of {sorts})")
+                return sort
+
+        # Option 4: Time-based rotation (default - industry standard)
+        hour = datetime.utcnow().hour
+
+        if 0 <= hour < 6:
+            sort = 'new'      # Morning: fresh overnight content
+        elif 6 <= hour < 12:
+            sort = 'hot'      # Midday: trending content
+        elif 12 <= hour < 18:
+            sort = 'rising'   # Afternoon: emerging trends
+        else:
+            sort = 'top'      # Evening: quality content
+
+        print(f"[Reddit Sort] Time-based rotation (hour {hour} UTC): {sort}")
+        return sort
+
     async def _scrape_reddit(self, config: Dict[str, Any], limit: int) -> List[ContentItem]:
         """Scrape Reddit content."""
         scraper = RedditScraper()
@@ -455,7 +555,8 @@ class ContentService:
         if not subreddits:
             subreddits = ['AI_Agents']  # Default fallback
 
-        sort = config.get('sort', 'hot')
+        # Use intelligent sort rotation (time-based by default, configurable)
+        sort = self._get_reddit_sort(config)
         time_filter = config.get('time_filter', 'all')
 
         all_items = []
@@ -939,23 +1040,52 @@ class ContentService:
         from datetime import timezone
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-        # Load content items within time window
+        # Load content items within time window (query slightly larger window for precision)
+        days_to_query = max(1, (hours + 23) // 24)  # Round up to include full time window
         all_items = self.supabase.load_content_items(
             workspace_id=workspace_id,
-            days=max(1, hours // 24),  # Convert hours to days (minimum 1 day)
+            days=days_to_query,
             limit=1000  # Large limit for filtering
         )
 
-        # Filter by scraped_at within time window and sort by score
+        # Filter by scraped_at within time window
         filtered_items = [
             item for item in all_items
             if item.scraped_at and item.scraped_at >= cutoff
         ]
 
-        # Sort by score DESC, then by created_at DESC
+        # Apply recency boost (same algorithm as newsletter generation)
+        now = datetime.now(timezone.utc)
+        for item in filtered_items:
+            age_hours = (now - item.scraped_at).total_seconds() / 3600
+
+            # Boost multipliers (matching newsletter_service.py _apply_freshness_decay)
+            if age_hours < 1:
+                multiplier = 3.0    # 300% - Breaking news (< 1 hour)
+            elif age_hours < 6:
+                multiplier = 2.0    # 200% - Recent content (1-6 hours)
+            elif age_hours < 24:
+                multiplier = 1.0    # 100% - Current content (6-24 hours)
+            elif age_hours < 168:  # 7 days
+                multiplier = 0.5    # 50% - Aging content (1-7 days)
+            else:
+                multiplier = 0.1    # 10% - Stale content (> 7 days)
+
+            # Calculate boosted score
+            original_score = item.score or 0
+            boosted_score = int(original_score * multiplier)
+
+            # Store as temporary attribute for sorting
+            item._boosted_score = boosted_score
+
+            # Log for debugging
+            boost_type = "BOOST" if multiplier > 1.0 else "DECAY" if multiplier < 1.0 else "NEUTRAL"
+            print(f"[TopStories] [{boost_type}] '{item.title[:50]}...' - {age_hours:.1f}h old, {multiplier}x, Score: {original_score} → {boosted_score}")
+
+        # Sort by boosted_score DESC, then by created_at DESC
         sorted_items = sorted(
             filtered_items,
-            key=lambda x: (x.score or 0, x.created_at or datetime.min.replace(tzinfo=timezone.utc)),
+            key=lambda x: (getattr(x, '_boosted_score', x.score or 0), x.created_at or datetime.min.replace(tzinfo=timezone.utc)),
             reverse=True
         )[:limit]
 

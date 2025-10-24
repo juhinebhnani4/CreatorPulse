@@ -2394,6 +2394,104 @@ for i, item in enumerate(items):
 
 ---
 
+## 2.9 The Stale Dashboard Problem - When Fresh Data Looks Old
+
+### What It Is (In Plain English)
+
+Imagine a newspaper stand that shows yesterday's newspaper even though today's edition arrived this morning. That's a **stale cache problem**.
+
+### Real-World Analogy: The Coffee Shop Menu Board
+
+**Scenario:**
+- 9:00 AM: Barista adds "Pumpkin Spice Latte" to today's menu
+- 9:05 AM: Customer looks at menu board
+- **Problem:** Menu board still shows yesterday's drinks (no Pumpkin Spice!)
+- **Reason:** Nobody updated the board after adding new drinks
+
+**Solution:** When you add new drinks, immediately update the menu board!
+
+### Our Real Example
+
+**The Problem:** "Top Stories" carousel showed the same 4 YouTube videos for hours, even after scraping fresh content
+
+**What users saw:**
+```
+Top Stories:
+- Video A (posted "just now")  ← But it's been here for 3 hours!
+- Video B (posted "just now")
+- Video C (posted "just now")
+- Video D (posted "just now")
+```
+
+**What happened behind the scenes:**
+1. User clicks "Scrape Content" → Backend fetches 50 new articles ✅
+2. Articles saved to database ✅
+3. **Frontend still shows old Top Stories from cache** ❌
+4. Cache expires after 2 minutes, shows new stories
+5. User: "It's not updating!" (because they expect instant refresh)
+
+**The Root Cause:**
+```typescript
+// Frontend cached Top Stories for 2 minutes
+staleTime: 2 * 60 * 1000  // "Don't refetch for 2 minutes"
+
+// When user scrapes new content:
+await scrapeContent()  // ✅ Fetches new data
+// ❌ FORGOT TO TELL FRONTEND: "Hey, refetch Top Stories now!"
+```
+
+### The Fix (Cache Invalidation)
+
+```typescript
+// After scraping new content, force refetch:
+const invalidateTopStories = useInvalidateTopStories();
+
+await scrapeContent();  // Fetch new data
+invalidateTopStories(workspaceId);  // ✅ Tell cache: "Old data is stale, refetch NOW!"
+```
+
+**Result:**
+- User scrapes content → Top Stories updates immediately ✅
+- Fresh articles appear instantly (not after 2 minutes)
+- Dashboard feels responsive and "alive"
+
+### When This Happens
+
+**Any time you:**
+1. Add/edit data in the backend
+2. Frontend has a cache for that data
+3. User expects to see changes immediately
+
+**Common examples:**
+- Newsletter generation → Dashboard shows new draft instantly
+- Subscriber added → Subscriber count updates immediately
+- Settings changed → UI reflects new settings right away
+
+### The Golden Rule
+
+> **"When you change the cake, update the display case!"**
+
+If your backend modifies data that the frontend has cached, you MUST invalidate that cache.
+
+### Quick Reference
+
+**Bad (stale dashboard):**
+```typescript
+await createNewsletter();  // Backend creates data
+// User sees old data for 2 minutes 😞
+```
+
+**Good (instant refresh):**
+```typescript
+await createNewsletter();  // Backend creates data
+invalidateNewsletters();   // Frontend refetches NOW ✅
+// User sees new newsletter immediately 🎉
+```
+
+**Time saved:** 5+ confused Slack messages from users saying "it's not working!"
+
+---
+
 # Part 4: Common Traps (Avoid These!) ⚠️
 
 > **Big Idea:** Everyone makes these mistakes. Learn from ours so you don't have to!

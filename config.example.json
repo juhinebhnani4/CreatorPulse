@@ -5,18 +5,38 @@
   "reddit": {
     "enabled": true,
     "limit": 25,
-    "subreddits": ["AI_Agents", "MachineLearning", "artificial"],
+    "subreddits": [
+      "MachineLearning",
+      "artificial",
+      "LocalLLaMA",
+      "OpenAI",
+      "LangChain",
+      "programming",
+      "webdev",
+      "Python",
+      "Entrepreneur",
+      "startups"
+    ],
     "sort": "hot",
-    "time_filter": "all"
+    "time_filter": "all",
+    "comment": "Industry standard: 6-hour scraping intervals. See docs/RECOMMENDED_CONTENT_SOURCES.md for 20+ curated subreddits"
   },
   "rss": {
     "enabled": true,
     "limit": 10,
     "feed_urls": [
-      "https://blog.openai.com/rss/",
-      "https://www.anthropic.com/rss.xml",
-      "https://ai.googleblog.com/feeds/posts/default"
-    ]
+      "https://openai.com/blog/rss/",
+      "https://blog.google/technology/ai/rss/",
+      "https://www.anthropic.com/news/rss",
+      "https://huggingface.co/blog/feed.xml",
+      "https://www.deepmind.com/blog/rss.xml",
+      "https://techcrunch.com/feed/",
+      "https://www.theverge.com/rss/index.xml",
+      "https://arstechnica.com/feed/",
+      "https://news.ycombinator.com/rss",
+      "https://www.wired.com/feed/rss"
+    ],
+    "comment": "Industry standard: Weekly scraping for RSS feeds. See docs/RECOMMENDED_CONTENT_SOURCES.md for quality indicators"
   },
   "blog": {
     "enabled": true,
@@ -33,19 +53,37 @@
     "enabled": true,
     "limit": 15,
     "channel_ids": [
+      "UCbfYPyITQ-7l4upoX8nvctg",
+      "UCYO_jab_esuFRV4b17AJtAw",
+      "UC295-Dw_tDNtZXFeAPAW6Aw",
+      "UCXZCJLdBC09xxGZ6gcdrc6A",
+      "UCJ0-OtVpF0wOKEqT2Z1HEtA",
       "UC_x5XG1OV2P6uZZ5FSM9Ttw",
-      "UCbfYPyITQ-7l4upoX8nvctg"
+      "UCsBjURrPoezykLs9EqgamOA",
+      "UCCezIgC97PvUuR4_gbFUs5g",
+      "UCsooa4yRKGN_zEE8iknghZA",
+      "UC2D2CMWXMOVWx7giW1n3LIg"
     ],
     "channel_usernames": [
+      "TwoMinutePapers",
+      "3blue1brown",
+      "SirajRaval",
+      "sentdex",
       "GoogleDevelopers",
-      "MicrosoftDeveloper"
+      "Fireship",
+      "CoreySchafer",
+      "TechWorldwithNana",
+      "YCombinator"
     ],
     "search_queries": [
       "AI news",
-      "machine learning tutorial"
+      "machine learning tutorial",
+      "web development 2025",
+      "startup advice"
     ],
     "order": "date",
-    "max_results_per_request": 50
+    "max_results_per_request": 50,
+    "comment": "Industry standard: Daily scraping for YouTube. See docs/RECOMMENDED_CONTENT_SOURCES.md for 15+ curated channels"
   },
   "newsletter": {
     "model": "gpt-4-turbo-preview",

@@ -295,6 +295,26 @@ class SupabaseManager:
         # on_conflict parameter ensures we update if duplicate exists
         # This works with the unique constraint: (workspace_id, source, source_url)
         try:
+            print(f"\n[DB Save] Attempting to UPSERT {len(data)} items to database...")
+            print(f"[DB Save] Sample of items being saved:")
+            for idx, item in enumerate(data[:5]):
+                print(f"  {idx+1}. Source: {item['source']:8} | Title: {item['title'][:40]:40} | URL: {item['source_url'][:60]}")
+
+            # Get existing URLs to determine which are updates vs inserts
+            existing_urls_result = self.service_client.table('content_items') \
+                .select('source_url') \
+                .eq('workspace_id', workspace_id) \
+                .in_('source_url', [item['source_url'] for item in data]) \
+                .execute()
+
+            existing_urls = {item['source_url'] for item in existing_urls_result.data}
+            new_count = sum(1 for item in data if item['source_url'] not in existing_urls)
+            update_count = len(data) - new_count
+
+            print(f"[DB Save] Expected operation breakdown:")
+            print(f"  - New inserts: {new_count}")
+            print(f"  - Updates (duplicates): {update_count}")
+
             result = self.service_client.table('content_items') \
                 .upsert(
                     data,
@@ -303,7 +323,8 @@ class SupabaseManager:
                 ) \
                 .execute()
 
-            print(f"[OK] Saved/updated {len(result.data)} content items (workspace: {workspace_id})")
+            print(f"[DB Save] ✅ UPSERT completed: {len(result.data)} items processed")
+            print(f"[DB Save] Breakdown: {new_count} new items inserted, {update_count} existing items updated (scraped_at timestamp refreshed)")
             return result.data
 
         except Exception as e:
@@ -855,47 +876,89 @@ class SupabaseManager:
         self,
         workspace_id: str,
         days_back: int = 30,
-        max_newsletters: int = None
+        max_newsletters: int = None,
+        include_drafts: bool = True,
+        draft_cooldown_hours: int = 24
     ) -> List[str]:
         """
-        Get content item IDs from recently sent newsletters.
+        Get content item IDs from recently sent newsletters and optionally draft newsletters.
+
+        Industry standard approach: Exclude content from sent newsletters (long window)
+        and draft newsletters (short window) to prevent content reuse during testing
+        while allowing content to be reused after cooldown expires.
 
         Args:
             workspace_id: Workspace ID
-            days_back: Look back N days (default: 30)
-            max_newsletters: Max newsletters to check (optional)
+            days_back: Look back N days for sent newsletters (default: 30)
+            max_newsletters: Max newsletters to check per status (optional)
+            include_drafts: Whether to include draft newsletters (default: True)
+            draft_cooldown_hours: Hours to exclude draft content (default: 24)
 
         Returns:
             Flat list of all content item IDs used in recent newsletters
         """
         from datetime import datetime, timedelta
 
-        # Calculate cutoff date
-        cutoff_date = datetime.now() - timedelta(days=days_back)
+        used_ids = []
 
-        # Query sent newsletters
-        query = self.service_client.table('newsletters') \
+        # Part 1: Query sent newsletters (30-day window)
+        sent_cutoff = datetime.now() - timedelta(days=days_back)
+
+        sent_query = self.service_client.table('newsletters') \
             .select('content_item_ids') \
             .eq('workspace_id', workspace_id) \
             .eq('status', 'sent') \
-            .gte('sent_at', cutoff_date.isoformat()) \
+            .gte('sent_at', sent_cutoff.isoformat()) \
             .order('sent_at', desc=True)
 
         if max_newsletters:
-            query = query.limit(max_newsletters)
+            sent_query = sent_query.limit(max_newsletters)
 
-        result = query.execute()
+        sent_result = sent_query.execute()
 
-        # Flatten all content_item_ids arrays into single list
-        used_ids = []
-        if result and result.data:
-            for newsletter in result.data:
+        # Collect IDs from sent newsletters
+        sent_count = 0
+        if sent_result and sent_result.data:
+            for newsletter in sent_result.data:
                 content_ids = newsletter.get('content_item_ids', [])
-                if content_ids:  # Check if not None or empty
+                if content_ids:
                     used_ids.extend(content_ids)
+                    sent_count += 1
+
+        # Part 2: Query draft newsletters (24-hour window) if enabled
+        draft_count = 0
+        if include_drafts:
+            draft_cutoff = datetime.now() - timedelta(hours=draft_cooldown_hours)
+
+            draft_query = self.service_client.table('newsletters') \
+                .select('content_item_ids') \
+                .eq('workspace_id', workspace_id) \
+                .eq('status', 'draft') \
+                .gte('generated_at', draft_cutoff.isoformat()) \
+                .order('generated_at', desc=True)
+
+            if max_newsletters:
+                draft_query = draft_query.limit(max_newsletters)
+
+            draft_result = draft_query.execute()
+
+            # Collect IDs from draft newsletters
+            if draft_result and draft_result.data:
+                for newsletter in draft_result.data:
+                    content_ids = newsletter.get('content_item_ids', [])
+                    if content_ids:
+                        used_ids.extend(content_ids)
+                        draft_count += 1
+
+        # Log exclusion summary
+        unique_ids = list(set(used_ids))
+        print(f"[ContentExclusion] Excluding {len(unique_ids)} unique content items:")
+        print(f"  - From {sent_count} sent newsletters (last {days_back} days)")
+        if include_drafts:
+            print(f"  - From {draft_count} draft newsletters (last {draft_cooldown_hours} hours)")
 
         # Return unique IDs
-        return list(set(used_ids))
+        return unique_ids
 
     def update_newsletter(self,
                          newsletter_id: str,
