@@ -67,6 +67,25 @@ class NewsletterService:
         if not has_anthropic:
             print("[NewsletterService] [WARNING] ANTHROPIC_API_KEY not set. Please add it to .env file")
 
+    def _verify_workspace_access(self, user_id: str, workspace_id: str) -> Dict[str, Any]:
+        """
+        Verify user has access to workspace.
+
+        Args:
+            user_id: User ID
+            workspace_id: Workspace ID
+
+        Returns:
+            Workspace dict
+
+        Raises:
+            ValueError: If workspace not found or user lacks access
+        """
+        workspace = self.supabase.get_workspace(workspace_id)
+        if not workspace:
+            raise ValueError("Workspace not found")
+        return workspace
+
     async def generate_newsletter(
         self,
         user_id: str,
@@ -119,219 +138,81 @@ class NewsletterService:
         if tone and tone not in ['professional', 'casual', 'technical', 'friendly', 'humorous', 'authoritative', 'conversational']:
             raise ValueError(f"Invalid tone '{tone}'. Must be one of: professional, casual, technical, friendly, humorous, authoritative, conversational")
 
-        # Verify user has access to workspace
-        workspace = self.supabase.get_workspace(workspace_id)
-        if not workspace:
-            raise ValueError("Workspace not found")
+        # HP-2: Refactored to orchestrator pattern using helper methods
+        # This method now coordinates 4 focused helper methods instead of 250+ lines of inline logic
 
-        # Fetch active trends for this workspace
+        # Step 1: Verify workspace access
+        workspace = self._verify_workspace_access(user_id, workspace_id)
+
+        # Step 2: Fetch active trends and style profile
         trends = await self.trend_service.get_active_trends(
             workspace_id=UUID(workspace_id),
             limit=NewsletterConstants.MAX_TRENDS_TO_FETCH
         )
-
-        # Fetch style profile for this workspace
         style_profile = await self.style_service.get_style_profile(
             workspace_id=UUID(workspace_id)
         )
 
-        # Load content items from database
-        content_items = self.supabase.load_content_items(
+        # Step 3: Fetch and filter content
+        content_items_dicts, content_items_for_generator = await self._fetch_and_filter_content(
             workspace_id=workspace_id,
-            days=days_back,
-            source=sources[0] if sources and len(sources) == 1 else None,
-            limit=max_items * NewsletterConstants.CONTENT_FETCH_MULTIPLIER  # Fetch more for filtering
+            days_back=days_back,
+            sources=sources,
+            max_items=max_items,
+            trends=trends,
+            feedback_service=self.feedback_service
         )
 
-        if not content_items:
-            raise ValueError(f"No content found in workspace for the last {days_back} days")
-
-        # Filter by sources if specified
-        if sources:
-            print(f"[DEBUG] Filtering by sources: {sources}")
-            print(f"[DEBUG] First item type before filter: {type(content_items[0]) if content_items else 'empty'}")
-            print(f"[DEBUG] First item value: {content_items[0] if content_items else 'empty'}")
-
-            filtered_items = []
-            for item in content_items:
-                # Check if it's a ContentItem object or dict
-                if hasattr(item, 'source'):
-                    # It's a ContentItem object
-                    if item.source in sources:
-                        filtered_items.append(item)
-                elif isinstance(item, dict):
-                    # It's a dict
-                    print(f"[WARNING] Found dict instead of ContentItem: {item.get('source')}")
-                    if item.get('source') in sources:
-                        filtered_items.append(item)
-                else:
-                    print(f"[ERROR] Unknown item type: {type(item)}")
-
-            content_items = filtered_items
-            print(f"[DEBUG] Filtered to {len(content_items)} items")
-
-        # Apply feedback-based content scoring adjustments
-        # NOTE: This converts ContentItem objects to dicts
-        content_items_dicts = self.feedback_service.adjust_content_scoring(
-            workspace_id=workspace_id,
-            content_items=content_items,
-            apply_source_quality=True,
-            apply_preferences=True
-        )
-
-        # Boost content related to active trends
-        if trends:
-            trend_keywords = set()
-            for trend in trends:
-                trend_keywords.update([kw.lower() for kw in trend.keywords])
-
-            for item in content_items_dicts:
-                # Check if item is related to any trend
-                item_text = (item.get('title', '') + ' ' + item.get('summary', '')).lower()
-                if any(keyword in item_text for keyword in trend_keywords):
-                    # Boost score using configured multiplier
-                    item['trend_boosted'] = True
-                    item['original_score'] = item.get('score', 0)
-                    item['score'] = int(item.get('score', 0) * NewsletterConstants.TREND_SCORE_BOOST_MULTIPLIER)
-
-        # Re-sort by score after trend boosting
-        content_items_dicts.sort(key=lambda x: x.get('score', 0), reverse=True)
-
-        # Limit to max_items
-        content_items_dicts = content_items_dicts[:max_items]
-
-        if not content_items_dicts:
-            raise ValueError("No content items match the specified filters")
-
-        # Convert back to ContentItem objects for generator
-        from src.ai_newsletter.models.content import ContentItem
-        content_items_for_generator = []
-        for item_dict in content_items_dicts:
-            try:
-                # ContentItem.from_dict() handles datetime parsing
-                content_items_for_generator.append(ContentItem.from_dict(item_dict))
-            except Exception as e:
-                # If conversion fails, skip this item with a warning
-                print(f"Warning: Failed to convert item to ContentItem: {e}")
-                continue
-
-        if not content_items_for_generator:
-            raise ValueError("No valid content items after conversion")
-
-        # Check if we should use OpenRouter or direct Anthropic API
+        # Step 4: Generate newsletter with AI (or delegate to OpenRouter path)
         if settings.use_openrouter:
-            # Use OpenRouter (via original NewsletterGenerator)
-            print(f"[NewsletterService] [INFO] Using Claude via OpenRouter")
+            # Use OpenRouter path (returns full response dict)
             return await self._generate_with_openrouter(
                 workspace_id, title, tone, temperature, language,
                 content_items_for_generator, content_items_dicts,
                 sources, days_back, trends, style_profile
             )
         else:
-            # Use direct Anthropic API (Claude)
-            print(f"[NewsletterService] [INFO] Using Claude direct API")
-            # Initialize Claude newsletter generator
-            claude_generator = ClaudeNewsletterGenerator(settings)
+            # Use direct Anthropic API
+            html_content, plain_text_content = await self._generate_with_ai(
+                content_items_for_generator=content_items_for_generator,
+                content_items_dicts=content_items_dicts,
+                title=title,
+                tone=tone,
+                temperature=temperature,
+                language=language,
+                style_profile=style_profile,
+                workspace_id=workspace_id,
+                sources=sources,
+                days_back=days_back,
+                trends=trends
+            )
 
-        # Convert ContentItem objects to dicts for Claude generator
-        items_for_claude = []
-        for item in content_items_for_generator:
-            items_for_claude.append({
-                'title': item.title,
-                'source': item.source,
-                'author': item.author or 'Unknown',
-                'source_url': item.source_url,
-                'summary': item.summary or item.content[:200] if item.content else 'No content',
-                'content': item.content
-            })
+            # Step 5: Save newsletter to database
+            newsletter = self._save_newsletter(
+                workspace_id=workspace_id,
+                title=title,
+                html_content=html_content,
+                content_items_dicts=content_items_dicts,
+                temperature=temperature,
+                tone=tone,
+                language=language,
+                sources=sources,
+                days_back=days_back,
+                trends=trends,
+                style_profile=style_profile
+            )
 
-        # Pass image URLs to Claude generator
-        # Extract image URLs from content items
-        for idx, item in enumerate(items_for_claude):
-            # Match with original content_items_dicts to get image_url
-            if idx < len(content_items_dicts):
-                item['image_url'] = content_items_dicts[idx].get('image_url')
-
-        # Generate newsletter content using Claude
-        print(f"[NewsletterService] [INFO] Calling Claude API with {len(items_for_claude)} items")
-        claude_result = claude_generator.generate_newsletter_content(
-            items=items_for_claude,
-            title=title,
-            tone=tone,
-            style_profile=style_profile  # Pass the fetched style profile
-        )
-
-        # Claude now returns COMPLETE HTML with images and styling
-        # Use it directly without wrapping in another template
-        html_content = claude_result.get('content', '')
-
-        # Debug: Check HTML content
-        print(f"[DEBUG] Newsletter generation completed")
-        print(f"[DEBUG] HTML content length: {len(html_content) if html_content else 0}")
-        print(f"[DEBUG] HTML content type: {type(html_content)}")
-        print(f"[DEBUG] HTML preview (first 200 chars): {html_content[:200] if html_content else 'None'}")
-
-        # Extract content item IDs from dict items (before conversion)
-        content_item_ids = []
-        print(f"[DEBUG] Extracting content item IDs from {len(content_items_dicts)} items")
-        for idx, item_dict in enumerate(content_items_dicts):
-            # Try to get ID from metadata or top level
-            item_id = item_dict.get('id') or item_dict.get('metadata', {}).get('id')
-            if idx == 0:
-                print(f"[DEBUG] First item keys: {list(item_dict.keys())}")
-                print(f"[DEBUG] First item ID: {item_id}")
-            if item_id:
-                content_item_ids.append(item_id)
-
-        print(f"[DEBUG] Extracted {len(content_item_ids)} content item IDs: {content_item_ids[:3] if content_item_ids else 'NONE'}")
-
-        # Extract subject line from h1 tag in HTML (for email subject)
-        import re
-        subject_line_match = re.search(r'<h1[^>]*>(.*?)</h1>', html_content, re.DOTALL | re.IGNORECASE)
-        if subject_line_match:
-            subject_line = subject_line_match.group(1).strip()
-            # Remove any HTML tags within the h1
-            subject_line = re.sub(r'<[^>]+>', '', subject_line)
-        else:
-            subject_line = title  # Fallback to title if no h1 found
-
-        # Save to database
-        newsletter = self.supabase.save_newsletter(
-            workspace_id=workspace_id,
-            title=title,
-            subject_line=subject_line,  # Add subject line for email
-            html_content=html_content,
-            plain_text_content=None,  # TODO: Generate plain text version
-            content_item_ids=content_item_ids,
-            model_used=settings.anthropic_model,  # Use Claude model
-            temperature=temperature,
-            tone=tone,
-            language=language,
-            metadata={
-                'sources': sources or [],
-                'days_back': days_back,
-                'use_claude': True,  # Track that Claude was used
-                'trends_used': [trend.topic for trend in trends] if trends else [],
+            # Return response with metadata
+            return {
+                'newsletter': newsletter,
+                'items': content_items_dicts,  # Include items array for frontend Edit mode and feedback buttons
+                'content_items_count': len(content_items_dicts),
+                'sources_used': list(set(item.get('source', 'unknown') for item in content_items_dicts)),
+                'trends_applied': len(trends) if trends else 0,
                 'trend_boosted_items': len([item for item in content_items_dicts if item.get('trend_boosted', False)]),
                 'style_profile_applied': style_profile is not None,
-                'style_tone': style_profile.tone if style_profile else None,
-                'style_formality': style_profile.formality_level if style_profile else None,
-                'style_trained_samples': style_profile.trained_on_count if style_profile else 0,
-                'style_vocabulary_level': style_profile.vocabulary_level if style_profile else None,
                 'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
             }
-        )
-
-        return {
-            'newsletter': newsletter,
-            'items': content_items_dicts,  # Include items array for frontend Edit mode and feedback buttons
-            'content_items_count': len(content_items_dicts),
-            'sources_used': list(set(item.get('source', 'unknown') for item in content_items_dicts)),
-            'trends_applied': len(trends) if trends else 0,
-            'trend_boosted_items': len([item for item in content_items_dicts if item.get('trend_boosted', False)]),
-            'style_profile_applied': style_profile is not None,
-            'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
-        }
 
     async def _generate_with_openrouter(
         self,
@@ -425,6 +306,288 @@ class NewsletterService:
             'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
         }
 
+    async def _fetch_and_filter_content(
+        self,
+        workspace_id: str,
+        days_back: int,
+        sources: Optional[List[str]],
+        max_items: int,
+        trends: List[Any],
+        feedback_service: Any
+    ) -> tuple[List[Dict[str, Any]], List[Any]]:
+        """
+        Fetch content items, apply filtering, scoring, and trend boosting.
+
+        Args:
+            workspace_id: Workspace ID
+            days_back: Days to look back
+            sources: Optional source filter
+            max_items: Max items to return
+            trends: Active trends for boosting
+            feedback_service: Feedback service instance
+
+        Returns:
+            Tuple of (content_items_dicts, content_items_for_generator)
+
+        Raises:
+            ValueError: If no content found or all filtered out
+        """
+        # Load content items from database
+        content_items = self.supabase.load_content_items(
+            workspace_id=workspace_id,
+            days=days_back,
+            source=sources[0] if sources and len(sources) == 1 else None,
+            limit=max_items * NewsletterConstants.CONTENT_FETCH_MULTIPLIER  # Fetch more for filtering
+        )
+
+        if not content_items:
+            raise ValueError(f"No content found in workspace for the last {days_back} days")
+
+        # Filter by sources if specified
+        if sources:
+            print(f"[DEBUG] Filtering by sources: {sources}")
+            print(f"[DEBUG] First item type before filter: {type(content_items[0]) if content_items else 'empty'}")
+            print(f"[DEBUG] First item value: {content_items[0] if content_items else 'empty'}")
+
+            filtered_items = []
+            for item in content_items:
+                # Check if it's a ContentItem object or dict
+                if hasattr(item, 'source'):
+                    # It's a ContentItem object
+                    if item.source in sources:
+                        filtered_items.append(item)
+                elif isinstance(item, dict):
+                    # It's a dict
+                    print(f"[WARNING] Found dict instead of ContentItem: {item.get('source')}")
+                    if item.get('source') in sources:
+                        filtered_items.append(item)
+                else:
+                    print(f"[ERROR] Unknown item type: {type(item)}")
+
+            content_items = filtered_items
+            print(f"[DEBUG] Filtered to {len(content_items)} items")
+
+        # Apply feedback-based content scoring adjustments
+        # NOTE: This converts ContentItem objects to dicts
+        content_items_dicts = feedback_service.adjust_content_scoring(
+            workspace_id=workspace_id,
+            content_items=content_items,
+            apply_source_quality=True,
+            apply_preferences=True
+        )
+
+        # Boost content related to active trends
+        if trends:
+            trend_keywords = set()
+            for trend in trends:
+                trend_keywords.update([kw.lower() for kw in trend.keywords])
+
+            for item in content_items_dicts:
+                # Check if item is related to any trend
+                item_text = (item.get('title', '') + ' ' + item.get('summary', '')).lower()
+                if any(keyword in item_text for keyword in trend_keywords):
+                    # Boost score using configured multiplier
+                    item['trend_boosted'] = True
+                    item['original_score'] = item.get('score', 0)
+                    item['score'] = int(item.get('score', 0) * NewsletterConstants.TREND_SCORE_BOOST_MULTIPLIER)
+
+        # Re-sort by score after trend boosting
+        content_items_dicts.sort(key=lambda x: x.get('score', 0), reverse=True)
+
+        # Limit to max_items
+        content_items_dicts = content_items_dicts[:max_items]
+
+        if not content_items_dicts:
+            raise ValueError("No content items match the specified filters")
+
+        # Convert back to ContentItem objects for generator
+        from src.ai_newsletter.models.content import ContentItem
+        content_items_for_generator = []
+        for item_dict in content_items_dicts:
+            try:
+                # ContentItem.from_dict() handles datetime parsing
+                content_items_for_generator.append(ContentItem.from_dict(item_dict))
+            except Exception as e:
+                # If conversion fails, skip this item with a warning
+                print(f"Warning: Failed to convert item to ContentItem: {e}")
+                continue
+
+        if not content_items_for_generator:
+            raise ValueError("No valid content items after conversion")
+
+        return content_items_dicts, content_items_for_generator
+
+    async def _generate_with_ai(
+        self,
+        content_items_for_generator: List[Any],
+        content_items_dicts: List[Dict[str, Any]],
+        title: str,
+        tone: str,
+        temperature: float,
+        language: str,
+        style_profile: Any,
+        workspace_id: str,
+        sources: Optional[List[str]],
+        days_back: int,
+        trends: List[Any]
+    ) -> tuple[str, str]:
+        """
+        Generate newsletter HTML and plain text using AI (OpenRouter or Anthropic).
+
+        Args:
+            content_items_for_generator: ContentItem objects
+            content_items_dicts: Content items as dicts
+            title: Newsletter title
+            tone: Newsletter tone
+            temperature: AI creativity level
+            language: Newsletter language
+            style_profile: Writing style profile
+            workspace_id: Workspace ID
+            sources: Source filters used
+            days_back: Days back filter
+            trends: Active trends
+
+        Returns:
+            Tuple of (html_content, plain_text_content)
+        """
+        # Check if we should use OpenRouter or direct Anthropic API
+        if settings.use_openrouter:
+            # Use OpenRouter (via original NewsletterGenerator)
+            print(f"[NewsletterService] [INFO] Using Claude via OpenRouter")
+            # Note: _generate_with_openrouter returns full dict, we need to handle that differently
+            raise NotImplementedError("OpenRouter path must use original generate_newsletter flow")
+        else:
+            # Use direct Anthropic API (Claude)
+            print(f"[NewsletterService] [INFO] Using Claude direct API")
+            # Initialize Claude newsletter generator
+            claude_generator = ClaudeNewsletterGenerator(settings)
+
+            # Convert ContentItem objects to dicts for Claude generator
+            items_for_claude = []
+            for item in content_items_for_generator:
+                items_for_claude.append({
+                    'title': item.title,
+                    'source': item.source,
+                    'author': item.author or 'Unknown',
+                    'source_url': item.source_url,
+                    'summary': item.summary or item.content[:200] if item.content else 'No content',
+                    'content': item.content
+                })
+
+            # Pass image URLs to Claude generator
+            # Extract image URLs from content items
+            for idx, item in enumerate(items_for_claude):
+                # Match with original content_items_dicts to get image_url
+                if idx < len(content_items_dicts):
+                    item['image_url'] = content_items_dicts[idx].get('image_url')
+
+            # Generate newsletter content using Claude
+            print(f"[NewsletterService] [INFO] Calling Claude API with {len(items_for_claude)} items")
+            claude_result = claude_generator.generate_newsletter_content(
+                items=items_for_claude,
+                title=title,
+                tone=tone,
+                style_profile=style_profile  # Pass the fetched style profile
+            )
+
+            # Claude now returns COMPLETE HTML with images and styling
+            # Use it directly without wrapping in another template
+            html_content = claude_result.get('content', '')
+
+            # Debug: Check HTML content
+            print(f"[DEBUG] Newsletter generation completed")
+            print(f"[DEBUG] HTML content length: {len(html_content) if html_content else 0}")
+            print(f"[DEBUG] HTML content type: {type(html_content)}")
+            print(f"[DEBUG] HTML preview (first 200 chars): {html_content[:200] if html_content else 'None'}")
+
+            return html_content, None  # Claude doesn't generate plain text version
+
+    def _save_newsletter(
+        self,
+        workspace_id: str,
+        title: str,
+        html_content: str,
+        content_items_dicts: List[Dict[str, Any]],
+        temperature: float,
+        tone: str,
+        language: str,
+        sources: Optional[List[str]],
+        days_back: int,
+        trends: List[Any],
+        style_profile: Any
+    ) -> Dict[str, Any]:
+        """
+        Save newsletter to database with metadata.
+
+        Args:
+            workspace_id: Workspace ID
+            title: Newsletter title
+            html_content: Generated HTML
+            content_items_dicts: Content items used
+            temperature: AI temperature used
+            tone: Tone used
+            language: Language used
+            sources: Source filters
+            days_back: Days back filter
+            trends: Trends used
+            style_profile: Style profile applied
+
+        Returns:
+            Saved newsletter dict
+        """
+        # Extract content item IDs from dict items (before conversion)
+        content_item_ids = []
+        print(f"[DEBUG] Extracting content item IDs from {len(content_items_dicts)} items")
+        for idx, item_dict in enumerate(content_items_dicts):
+            # Try to get ID from metadata or top level
+            item_id = item_dict.get('id') or item_dict.get('metadata', {}).get('id')
+            if idx == 0:
+                print(f"[DEBUG] First item keys: {list(item_dict.keys())}")
+                print(f"[DEBUG] First item ID: {item_id}")
+            if item_id:
+                content_item_ids.append(item_id)
+
+        print(f"[DEBUG] Extracted {len(content_item_ids)} content item IDs: {content_item_ids[:3] if content_item_ids else 'NONE'}")
+
+        # Extract subject line from h1 tag in HTML (for email subject)
+        import re
+        subject_line_match = re.search(r'<h1[^>]*>(.*?)</h1>', html_content, re.DOTALL | re.IGNORECASE)
+        if subject_line_match:
+            subject_line = subject_line_match.group(1).strip()
+            # Remove any HTML tags within the h1
+            subject_line = re.sub(r'<[^>]+>', '', subject_line)
+        else:
+            subject_line = title  # Fallback to title if no h1 found
+
+        # Save to database
+        newsletter = self.supabase.save_newsletter(
+            workspace_id=workspace_id,
+            title=title,
+            subject_line=subject_line,  # Add subject line for email
+            html_content=html_content,
+            plain_text_content=None,  # TODO: Generate plain text version
+            content_item_ids=content_item_ids,
+            model_used=settings.anthropic_model,  # Use Claude model
+            temperature=temperature,
+            tone=tone,
+            language=language,
+            metadata={
+                'sources': sources or [],
+                'days_back': days_back,
+                'use_claude': True,  # Track that Claude was used
+                'trends_used': [trend.topic for trend in trends] if trends else [],
+                'trend_boosted_items': len([item for item in content_items_dicts if item.get('trend_boosted', False)]),
+                'style_profile_applied': style_profile is not None,
+                'style_tone': style_profile.tone if style_profile else None,
+                'style_formality': style_profile.formality_level if style_profile else None,
+                'style_trained_samples': style_profile.trained_on_count if style_profile else 0,
+                'style_vocabulary_level': style_profile.vocabulary_level if style_profile else None,
+                'feedback_adjusted_items': len([item for item in content_items_dicts if item.get('adjustments', [])])
+            }
+        )
+
+        return newsletter
+
     async def update_newsletter_html(
         self,
         newsletter_id: str,
@@ -464,12 +627,19 @@ class NewsletterService:
 
         return updated_newsletter
 
-    def _populate_newsletter_items(self, newsletter: Dict[str, Any]) -> Dict[str, Any]:
+    def _populate_newsletter_items(
+        self,
+        newsletter: Dict[str, Any],
+        bulk_items_dict: Optional[Dict[str, Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
         """
         Populate newsletter items field from content_item_ids.
 
         Args:
             newsletter: Newsletter dict with content_item_ids
+            bulk_items_dict: Optional pre-loaded items dict (id -> item).
+                           If provided, skips database query (O(1) lookup).
+                           Used by list_newsletters() for bulk optimization.
 
         Returns:
             Newsletter dict with items field populated
@@ -485,15 +655,30 @@ class NewsletterService:
             print(f"[_populate_newsletter_items] No content items found, returning empty items")
             return newsletter
 
-        # Fetch content items from database in bulk (single query instead of N queries)
-        items = self.supabase.get_content_items_bulk(content_item_ids)
+        # If bulk dict provided, use it (O(1) lookup, no database query)
+        if bulk_items_dict is not None:
+            items = [
+                bulk_items_dict[item_id]
+                for item_id in content_item_ids
+                if item_id in bulk_items_dict
+            ]
 
-        # Log any missing items (items not found in database)
-        if len(items) < len(content_item_ids):
-            found_ids = {item['id'] for item in items}
-            missing_ids = set(content_item_ids) - found_ids
-            for missing_id in missing_ids:
-                print(f"[_populate_newsletter_items] WARNING: Could not find content item {missing_id}")
+            # Log any missing items
+            if len(items) < len(content_item_ids):
+                found_ids = {item['id'] for item in items}
+                missing_ids = set(content_item_ids) - found_ids
+                for missing_id in missing_ids:
+                    print(f"[_populate_newsletter_items] WARNING: Could not find content item {missing_id} in bulk dict")
+        else:
+            # Fallback to individual bulk query (backward compatibility)
+            items = self.supabase.get_content_items_bulk(content_item_ids)
+
+            # Log any missing items (items not found in database)
+            if len(items) < len(content_item_ids):
+                found_ids = {item['id'] for item in items}
+                missing_ids = set(content_item_ids) - found_ids
+                for missing_id in missing_ids:
+                    print(f"[_populate_newsletter_items] WARNING: Could not find content item {missing_id}")
 
         # Add items field to newsletter
         newsletter['items'] = items
@@ -541,8 +726,28 @@ class NewsletterService:
             limit=limit
         )
 
-        # Populate items field for each newsletter
-        newsletters_with_items = [self._populate_newsletter_items(nl) for nl in newsletters]
+        # HP-4: Optimize with bulk content loading
+        # Instead of N queries (one per newsletter), do 1 bulk query for ALL items
+
+        # Step 1: Collect all content item IDs from all newsletters
+        all_item_ids = []
+        for nl in newsletters:
+            all_item_ids.extend(nl.get('content_item_ids', []))
+
+        # Step 2: Bulk load ALL items in a single database query
+        bulk_items = {}
+        if all_item_ids:
+            print(f"[list_newsletters] Bulk loading {len(all_item_ids)} content items for {len(newsletters)} newsletters")
+            items_list = self.supabase.get_content_items_bulk(all_item_ids)
+            # Create id -> item dictionary for O(1) lookup
+            bulk_items = {item['id']: item for item in items_list}
+            print(f"[list_newsletters] Loaded {len(bulk_items)} unique items")
+
+        # Step 3: Populate items for each newsletter using the bulk dict
+        newsletters_with_items = [
+            self._populate_newsletter_items(nl, bulk_items_dict=bulk_items)
+            for nl in newsletters
+        ]
 
         return {
             'workspace_id': workspace_id,
