@@ -69,10 +69,30 @@ class TrendDetectionService(BaseService):
 
         Returns:
             Tuple of (trends, analysis_summary)
+
+        Raises:
+            ValueError: If parameters are invalid
         """
+        # Validate parameters
+        if max_trends <= 0:
+            raise ValueError("max_trends must be positive")
+
+        if days_back <= 0 or days_back > 365:
+            raise ValueError("days_back must be between 1 and 365")
+
+        # Validate workspace_id UUID
+        try:
+            UUID(str(workspace_id))
+        except ValueError as e:
+            raise ValueError(f"Invalid workspace_id UUID: {e}")
+
         self.logger.info(f"Detecting trends for workspace {workspace_id}, days_back={days_back}")
         if min_confidence is None:
             min_confidence = self.min_confidence
+
+        # Validate min_confidence after default assignment
+        if not 0.0 <= min_confidence <= 1.0:
+            raise ValueError(f"min_confidence must be between 0.0 and 1.0, got {min_confidence}")
 
         # Get recent content
         cutoff_date = datetime.now() - timedelta(days=days_back)
@@ -464,12 +484,15 @@ class TrendDetectionService(BaseService):
                 # Fallback 2: Merge topics with high keyword overlap
                 kw2 = set(topic2['keywords'])
                 overlap = len(kw1 & kw2) / len(kw1 | kw2)  # Jaccard similarity
+                shared_keywords = kw1 & kw2
 
-                if overlap >= 0.7:  # 70% keyword overlap (more conservative)
+                # Use configurable thresholds from constants
+                if (overlap >= TrendConstants.TOPIC_MERGE_SIMILARITY_THRESHOLD and
+                    len(shared_keywords) >= TrendConstants.TOPIC_MERGE_MIN_KEYWORD_OVERLAP):
                     # Log merge decision for debugging
                     self.logger.debug(
                         f"Merging topics by keywords: '{topic1['topic']}' + '{topic2['topic']}' "
-                        f"(overlap={overlap:.2f}, shared keywords={list(kw1 & kw2)})"
+                        f"(overlap={overlap:.2f}, shared_kw={len(shared_keywords)}, threshold={TrendConstants.TOPIC_MERGE_SIMILARITY_THRESHOLD})"
                     )
 
                     # Merge topic2 into topic1

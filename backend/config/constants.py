@@ -69,6 +69,10 @@ class TrendConstants:
     # Cross-source validation
     MIN_SOURCES_FOR_VALIDATION: int = int(os.getenv("MIN_SOURCES_FOR_TREND", "2"))
 
+    # Topic merging thresholds
+    TOPIC_MERGE_SIMILARITY_THRESHOLD: float = float(os.getenv("TOPIC_MERGE_SIMILARITY", "0.7"))  # Jaccard similarity (0-1)
+    TOPIC_MERGE_MIN_KEYWORD_OVERLAP: int = int(os.getenv("TOPIC_MERGE_MIN_KEYWORDS", "2"))  # Minimum shared keywords
+
 
 class AnalyticsConstants:
     """Constants for analytics tracking."""

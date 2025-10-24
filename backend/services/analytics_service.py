@@ -17,6 +17,10 @@ from backend.database import get_supabase_client, get_supabase_service_client
 from backend.settings import settings
 
 
+# Valid event types for analytics tracking
+VALID_EVENT_TYPES = {'sent', 'delivered', 'opened', 'clicked', 'bounced', 'unsubscribed', 'spam_reported'}
+
+
 class AnalyticsService:
     """Service for tracking and analyzing email engagement."""
 
@@ -56,7 +60,32 @@ class AnalyticsService:
 
         Returns:
             Created event record
+
+        Raises:
+            ValueError: If event_type is invalid or UUIDs are malformed
         """
+        # Validate event type
+        if event_type not in VALID_EVENT_TYPES:
+            raise ValueError(
+                f"Invalid event_type '{event_type}'. "
+                f"Must be one of: {', '.join(sorted(VALID_EVENT_TYPES))}"
+            )
+
+        # Validate UUIDs
+        try:
+            UUID(str(workspace_id))
+            UUID(str(newsletter_id))
+            if subscriber_id:
+                UUID(str(subscriber_id))
+            if content_item_id:
+                UUID(str(content_item_id))
+        except ValueError as e:
+            raise ValueError(f"Invalid UUID format: {e}")
+
+        # Validate recipient email is not empty
+        if not recipient_email or not recipient_email.strip():
+            raise ValueError("recipient_email cannot be empty")
+
         # Parse location from IP if available
         location_data = await self._get_location_from_ip(ip_address) if ip_address else {}
 
