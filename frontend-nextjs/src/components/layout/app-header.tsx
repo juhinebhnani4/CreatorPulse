@@ -22,7 +22,7 @@ export function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, clearAuth } = useAuthStore();
-  const { currentWorkspace, setCurrentWorkspace } = useWorkspaceStore();
+  const { currentWorkspace, setCurrentWorkspace, clearWorkspace } = useWorkspaceStore();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 
   // Fetch user's workspaces
@@ -35,6 +35,7 @@ export function AppHeader() {
   const handleLogout = () => {
     authApi.logout();
     clearAuth();
+    clearWorkspace(); // Clear workspace state to prevent cross-user data leakage
     router.push('/login');
   };
 

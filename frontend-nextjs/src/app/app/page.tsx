@@ -41,7 +41,7 @@ import { Workspace, WorkspaceConfig } from '@/types/workspace';
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isAuthenticated, clearAuth, _hasHydrated } = useAuthStore();
-  const { currentWorkspace, setCurrentWorkspace } = useWorkspaceStore();
+  const { currentWorkspace, setCurrentWorkspace, clearWorkspace } = useWorkspaceStore();
   const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
   const [draftStatus, setDraftStatus] = useState<'ready' | 'generating' | 'scheduled' | 'stale' | 'empty'>('empty');
@@ -73,6 +73,7 @@ export default function DashboardPage() {
   const [showSendTest, setShowSendTest] = useState(false);
   const [showScheduleSend, setShowScheduleSend] = useState(false);
   const [showGenerationSettings, setShowGenerationSettings] = useState(false);
+  const [justGeneratedNewsletter, setJustGeneratedNewsletter] = useState<Newsletter | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -154,6 +155,7 @@ export default function DashboardPage() {
   const handleLogout = () => {
     authApi.logout();
     clearAuth();
+    clearWorkspace(); // Clear workspace state to prevent cross-user data leakage
     router.push('/login');
   };
 
@@ -350,7 +352,7 @@ export default function DashboardPage() {
         }
       }, 1500);
 
-      const newsletter = await newslettersApi.generate({
+      const result = await newslettersApi.generate({
         workspace_id: workspace.id,
         title: `Newsletter - ${new Date().toLocaleDateString()}`,
         ...settings,
@@ -358,9 +360,19 @@ export default function DashboardPage() {
 
       clearInterval(stepInterval);
 
-      // Invalidate newsletters cache to refetch with new newsletter
+      // Extract newsletter from API response
+      const newsletter = result.newsletter;
+
+      // Store the generated newsletter for immediate use
+      setJustGeneratedNewsletter(newsletter);
+
+      // Invalidate cache in background (non-blocking)
       invalidateNewsletters(workspace.id);
+
       setDraftStatus('ready');
+
+      // Auto-open preview with new newsletter
+      setShowDraftEditor(true);
 
       toast({
         title: '✓ Newsletter Generated',
@@ -815,26 +827,32 @@ export default function DashboardPage() {
       </main>
 
       {/* Modals */}
-      {latestNewsletter && (
+      {(justGeneratedNewsletter || latestNewsletter) && (
         <>
           <DraftEditorModal
             open={showDraftEditor}
-            onClose={() => setShowDraftEditor(false)}
-            draftId={latestNewsletter.id}
-            subject={latestNewsletter.subject_line}
-            items={(latestNewsletter.items || []).map(transformNewsletterItemToFrontend)}
+            onClose={() => {
+              setShowDraftEditor(false);
+              setJustGeneratedNewsletter(null);
+            }}
+            draftId={justGeneratedNewsletter?.id || latestNewsletter.id}
+            subject={justGeneratedNewsletter?.subject_line || latestNewsletter.subject_line}
+            items={(justGeneratedNewsletter?.items || latestNewsletter.items || []).map(transformNewsletterItemToFrontend)}
             onSave={handleSaveDraft}
             onEditArticle={handleEditArticle}
             onSendNow={() => {
               setShowDraftEditor(false);
+              setJustGeneratedNewsletter(null);
               setShowSendConfirmation(true);
             }}
             onSendLater={() => {
               setShowDraftEditor(false);
+              setJustGeneratedNewsletter(null);
               setShowScheduleSend(true);
             }}
             onSendTest={() => {
               setShowDraftEditor(false);
+              setJustGeneratedNewsletter(null);
               setShowSendTest(true);
             }}
           />
@@ -842,16 +860,17 @@ export default function DashboardPage() {
           <SendConfirmationModal
             open={showSendConfirmation}
             onClose={() => setShowSendConfirmation(false)}
-            newsletterId={latestNewsletter.id}
+            newsletterId={justGeneratedNewsletter?.id || latestNewsletter.id}
             subscriberCount={subscriberCount}
-            subject={latestNewsletter.subject_line}
+            subject={justGeneratedNewsletter?.subject_line || latestNewsletter.subject_line}
             onConfirm={async () => {
               if (!workspace) return;
 
               try {
+                const newsletterIdToSend = justGeneratedNewsletter?.id || latestNewsletter.id;
                 // Send newsletter using delivery API
                 await deliveryApi.send({
-                  newsletter_id: latestNewsletter.id,
+                  newsletter_id: newsletterIdToSend,
                   workspace_id: workspace.id,
                 });
 
@@ -902,8 +921,9 @@ export default function DashboardPage() {
             onClose={() => setShowSendTest(false)}
             onSend={async (email) => {
               try {
+                const newsletterIdToTest = justGeneratedNewsletter?.id || latestNewsletter.id;
                 await deliveryApi.sendTest(
-                  latestNewsletter.id,
+                  newsletterIdToTest,
                   workspace.id,
                   email
                 );
@@ -930,10 +950,11 @@ export default function DashboardPage() {
             onClose={() => setShowScheduleSend(false)}
             onSchedule={async (scheduledAt) => {
               try {
+                const newsletterIdToSchedule = justGeneratedNewsletter?.id || latestNewsletter.id;
                 // Create a scheduled job for this newsletter
                 await schedulerApi.scheduleOnce(
                   workspace.id,
-                  latestNewsletter.id,
+                  newsletterIdToSchedule,
                   scheduledAt
                 );
 
