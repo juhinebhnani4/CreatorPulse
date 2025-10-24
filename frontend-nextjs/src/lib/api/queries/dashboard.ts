@@ -4,6 +4,7 @@ import { newslettersApi } from '@/lib/api/newsletters';
 import { contentApi } from '@/lib/api/content';
 import { subscribersApi } from '@/lib/api/subscribers';
 import { analyticsApi } from '@/lib/api/analytics';
+import { schedulerApi } from '@/lib/api/scheduler';
 import { Workspace, WorkspaceConfig } from '@/types/workspace';
 import { Newsletter } from '@/types/newsletter';
 
@@ -31,6 +32,7 @@ export const dashboardKeys = {
   subscriberStats: (workspaceId: string) => [...dashboardKeys.all, 'subscriber-stats', workspaceId] as const,
   analytics: (workspaceId: string) => [...dashboardKeys.all, 'analytics', workspaceId] as const,
   topStories: (workspaceId: string) => [...dashboardKeys.all, 'top-stories', workspaceId] as const,
+  activities: (workspaceId: string) => [...dashboardKeys.all, 'activities', workspaceId] as const,
 };
 
 // ============================================================================
@@ -246,6 +248,12 @@ export function useDashboardData(currentWorkspaceId?: string) {
     error: analyticsError,
   } = useAnalyticsSummary(workspaceId);
 
+  const {
+    data: activities = [],
+    isLoading: isLoadingActivities,
+    error: activitiesError,
+  } = useWorkspaceActivities(workspaceId);
+
   // Calculate derived states
   const hasSources = config?.sources?.some(s => s.enabled) || false;
   const subscriberCount = subscriberStats?.active_subscribers || 0;
@@ -258,7 +266,8 @@ export function useDashboardData(currentWorkspaceId?: string) {
     isLoadingContent ||
     isLoadingNewsletters ||
     isLoadingSubscribers ||
-    isLoadingAnalytics;
+    isLoadingAnalytics ||
+    isLoadingActivities;
 
   // Combine errors
   const error =
@@ -267,7 +276,8 @@ export function useDashboardData(currentWorkspaceId?: string) {
     contentError ||
     newslettersError ||
     subscribersError ||
-    analyticsError;
+    analyticsError ||
+    activitiesError;
 
   return {
     // Data
@@ -279,6 +289,7 @@ export function useDashboardData(currentWorkspaceId?: string) {
     latestNewsletter,
     subscriberCount,
     analyticsData,
+    activities,
     hasSources,
 
     // States
@@ -382,6 +393,36 @@ export function useInvalidateTopStories() {
   return (workspaceId: string) => {
     queryClient.invalidateQueries({
       queryKey: dashboardKeys.topStories(workspaceId),
+    });
+  };
+}
+
+/**
+ * Fetch workspace activities for dashboard feed
+ */
+export function useWorkspaceActivities(workspaceId: string | undefined) {
+  return useQuery({
+    queryKey: dashboardKeys.activities(workspaceId || ''),
+    queryFn: async () => {
+      if (!workspaceId) return [];
+      return await schedulerApi.getWorkspaceActivities(workspaceId, 10);
+    },
+    enabled: !!workspaceId,
+    staleTime: 30 * 1000, // 30 seconds (real-time-ish updates)
+    gcTime: 5 * 60 * 1000,   // 5 minutes cache
+  });
+}
+
+/**
+ * Hook to invalidate activities cache
+ * Use after job executions complete
+ */
+export function useInvalidateActivities() {
+  const queryClient = useQueryClient();
+
+  return (workspaceId: string) => {
+    queryClient.invalidateQueries({
+      queryKey: dashboardKeys.activities(workspaceId),
     });
   };
 }

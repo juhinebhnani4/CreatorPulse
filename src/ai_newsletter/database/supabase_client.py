@@ -1310,6 +1310,33 @@ class SupabaseManager:
 
         return result.data
 
+    def get_workspace_recent_executions(
+        self,
+        workspace_id: str,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent execution history across all jobs in workspace.
+
+        Used for dashboard activity feed.
+        Ordered by most recent first.
+
+        Args:
+            workspace_id: Workspace ID to filter executions
+            limit: Maximum number of executions to return (default: 10)
+
+        Returns:
+            List of execution records
+        """
+        result = self.service_client.table('scheduler_executions') \
+            .select('*') \
+            .eq('workspace_id', workspace_id) \
+            .order('started_at', desc=True) \
+            .limit(limit) \
+            .execute()
+
+        return result.data or []
+
     # ========================================
     # TREND OPERATIONS
     # ========================================

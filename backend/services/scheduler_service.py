@@ -354,6 +354,108 @@ class SchedulerService(BaseService):
 
         return stats
 
+    @handle_service_errors(default_return=[], raise_on_error=False)
+    async def get_workspace_activities(
+        self,
+        user_id: str,
+        workspace_id: str,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent activities for workspace activity feed.
+
+        Returns execution history transformed to activity format:
+        - type: 'scrape' | 'generate' | 'send' | 'schedule'
+        - title: Human-readable title
+        - description: Details about the activity
+        - timestamp: When it occurred
+        - status: 'success' | 'pending' | 'scheduled'
+
+        Args:
+            user_id: User requesting activities
+            workspace_id: Workspace ID
+            limit: Max number of activities (default: 10)
+
+        Returns:
+            List of activity dictionaries
+        """
+        self.logger.info(f"Fetching recent activities for workspace {workspace_id}")
+
+        # Verify workspace access
+        if not self.db.user_has_workspace_access(user_id, workspace_id):
+            raise NotFoundError(f"Access denied: User not in workspace")
+
+        # Get recent executions
+        executions = self.db.get_workspace_recent_executions(workspace_id, limit=limit)
+
+        # Transform executions to activities
+        activities = []
+        for execution in executions:
+            actions = execution.get('actions_performed', [])
+            status_map = {
+                'completed': 'success',
+                'running': 'pending',
+                'failed': 'pending',
+                'partial': 'success'
+            }
+
+            # Create activity for each action performed
+            for action in actions:
+                activity = {
+                    'id': f"{execution['id']}-{action}",
+                    'type': action,
+                    'status': status_map.get(execution.get('status', 'pending'), 'success'),
+                    'timestamp': execution.get('started_at'),
+                }
+
+                # Action-specific titles and descriptions
+                if action == 'scrape':
+                    scrape_result = execution.get('scrape_result', {})
+                    items_count = scrape_result.get('items_count', 0)
+                    sources = scrape_result.get('sources', [])
+                    sources_count = len(sources)  # Calculate count from array
+                    activity['title'] = 'Content Scraped'
+                    activity['description'] = f'{items_count} new items from {sources_count} sources'
+
+                elif action == 'generate':
+                    activity['title'] = 'Newsletter Generated'
+                    activity['description'] = 'Draft ready for review'
+
+                elif action == 'send':
+                    send_result = execution.get('send_result', {})
+                    recipients = send_result.get('recipients_count', 0)
+                    activity['title'] = 'Newsletter Sent'
+                    activity['description'] = f'Delivered to {recipients} subscribers'
+
+                activities.append(activity)
+
+        # Add next scheduled job as first activity
+        jobs = await self.list_jobs(user_id, workspace_id)
+        active_jobs = [j for j in jobs if j.is_enabled and j.next_run_at]
+        if active_jobs:
+            next_job = min(active_jobs, key=lambda j: j.next_run_at)
+            next_run = datetime.fromisoformat(next_job.next_run_at.replace('Z', '+00:00'))
+            time_until = next_run - datetime.now(timezone.utc)
+            hours = int(time_until.total_seconds() / 3600)
+
+            if hours < 24:
+                time_desc = f"Tomorrow at {next_job.schedule_time}" if hours > 12 else f"in {hours}h"
+            else:
+                days = int(hours / 24)
+                time_desc = f"in {days}d"
+
+            activities.insert(0, {
+                'id': f'schedule-{next_job.id}',
+                'type': 'schedule',
+                'title': 'Next Newsletter Scheduled',
+                'description': time_desc,
+                'timestamp': next_job.next_run_at,
+                'status': 'scheduled'
+            })
+
+        self.logger.info(f"Returning {len(activities)} activities")
+        return activities[:limit]
+
 
 # Singleton instance
 scheduler_service = SchedulerService()

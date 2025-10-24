@@ -298,6 +298,44 @@ async def get_job_execution_history(
         )
 
 
+@router.get("/workspaces/{workspace_id}/activities", response_model=APIResponse)
+async def get_workspace_activities(
+    workspace_id: str,
+    limit: int = 10,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get recent activities for workspace dashboard.
+
+    Returns recent execution history formatted as activity feed items.
+    Includes scraping, generation, sending, and scheduled activities.
+
+    Used by dashboard "Recent Activity" section.
+    """
+    try:
+        activities = await scheduler_service.get_workspace_activities(
+            user_id=user_id,
+            workspace_id=workspace_id,
+            limit=limit
+        )
+
+        return APIResponse(
+            success=True,
+            data={
+                'activities': activities,
+                'count': len(activities),
+                'workspace_id': workspace_id
+            },
+            error=None
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get workspace activities: {str(e)}"
+        )
+
+
 @router.get("/{job_id}/stats", response_model=APIResponse)
 async def get_job_execution_stats(
     job_id: str,

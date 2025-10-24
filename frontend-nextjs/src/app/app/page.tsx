@@ -818,7 +818,7 @@ export default function DashboardPage() {
 
               {/* Right: Recent Activity (takes 1 column) */}
               <div className="lg:col-span-1">
-                <RecentActivity />
+                <RecentActivity activities={activities} />
               </div>
             </div>
           )}

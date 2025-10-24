@@ -76,8 +76,7 @@ export interface SchedulerExecution {
   generate_result?: Record<string, any>;
   send_result?: Record<string, any>;
   error_message?: string;
-  error_details?: Record<string, any>;
-  execution_log: string[];
+  // Note: error_details and execution_log removed in migration 014
   created_at: string;
 }
 
@@ -106,4 +105,14 @@ export interface RunJobNowResponse {
   job_id: string;
   status: string;
   message: string;
+}
+
+// Activity interface for dashboard activity feed
+export interface Activity {
+  id: string;
+  type: 'scrape' | 'generate' | 'send' | 'schedule';
+  title: string;
+  description: string;
+  timestamp: string;
+  status: 'success' | 'pending' | 'scheduled';
 }
