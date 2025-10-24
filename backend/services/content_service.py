@@ -17,6 +17,7 @@ from src.ai_newsletter.scrapers.blog_scraper import BlogScraper
 from src.ai_newsletter.scrapers.x_scraper import XScraper
 from src.ai_newsletter.scrapers.youtube_scraper import YouTubeScraper
 from src.ai_newsletter.models.content import ContentItem
+from backend.config.constants import ContentConstants
 
 
 class ContentService:
@@ -452,8 +453,9 @@ class ContentService:
         return all_items[:limit * len(urls)]  # Allow limit per URL, not total limit
 
     async def _scrape_x(self, config: Dict[str, Any], limit: int) -> List[ContentItem]:
-        """Scrape X (Twitter) content with caching to avoid rate limits."""
+        """Scrape X (Twitter) content with batch API calls to avoid N+1 queries."""
         import os
+        import asyncio
 
         # Extract credentials from config or environment
         # Prefer environment variables for API keys (more secure)
@@ -473,34 +475,71 @@ class ContentService:
 
         all_items = []
 
-        for username in usernames:
-            cache_key = f"x_{username}"
+        # Batch usernames (configurable batch size to respect Twitter rate limits: 300 req/15min)
+        batch_size = ContentConstants.TWITTER_BATCH_SIZE
 
-            # Check cache
-            if cache_key in self._twitter_cache:
-                items, cached_at = self._twitter_cache[cache_key]
-                age = (datetime.now() - cached_at).total_seconds()
-                if age < self._cache_ttl:
-                    print(f"[Twitter] Using cached data for @{username} (age: {age:.0f}s)")
-                    all_items.extend(items)
-                    continue
+        for i in range(0, len(usernames), batch_size):
+            batch = usernames[i:i+batch_size]
+            cache_key_prefix = "x_"
+
+            # Check cache for entire batch first
+            cached_items = []
+            uncached_usernames = []
+
+            for username in batch:
+                cache_key = f"{cache_key_prefix}{username}"
+                if cache_key in self._twitter_cache:
+                    items, cached_at = self._twitter_cache[cache_key]
+                    age = (datetime.now() - cached_at).total_seconds()
+                    if age < self._cache_ttl:
+                        print(f"[Twitter] Using cached data for @{username} (age: {age:.0f}s)")
+                        cached_items.extend(items)
+                    else:
+                        print(f"[Twitter] Cache expired for @{username} (age: {age:.0f}s > {self._cache_ttl}s)")
+                        uncached_usernames.append(username)
                 else:
-                    print(f"[Twitter] Cache expired for @{username} (age: {age:.0f}s > {self._cache_ttl}s)")
+                    uncached_usernames.append(username)
 
-            # Fetch fresh data
-            print(f"[Twitter] Fetching fresh data for @{username}...")
-            try:
-                items = scraper.fetch_user_timeline(username=username, limit=limit)
+            all_items.extend(cached_items)
 
-                # Cache results (even if empty, to avoid repeated failures)
-                self._twitter_cache[cache_key] = (items, datetime.now())
-                print(f"[Twitter] Cached {len(items)} tweets from @{username}")
+            # Fetch uncached usernames concurrently
+            if uncached_usernames:
+                print(f"[Twitter] Fetching {len(uncached_usernames)} usernames concurrently...")
 
-                all_items.extend(items)
-            except Exception as e:
-                print(f"[Twitter] Error fetching @{username}: {e}")
-                # Cache empty result to avoid immediate retry
-                self._twitter_cache[cache_key] = ([], datetime.now())
+                # Define async function to fetch with caching
+                async def fetch_with_cache(username):
+                    cache_key = f"{cache_key_prefix}{username}"
+                    try:
+                        print(f"[Twitter] Fetching fresh data for @{username}...")
+                        items = scraper.fetch_user_timeline(username=username, limit=limit)
+
+                        # Cache results (even if empty, to avoid repeated failures)
+                        self._twitter_cache[cache_key] = (items, datetime.now())
+                        print(f"[Twitter] Cached {len(items)} tweets from @{username}")
+
+                        return items
+                    except Exception as e:
+                        print(f"[Twitter] Error fetching @{username}: {e}")
+                        # Cache empty result to avoid immediate retry
+                        self._twitter_cache[cache_key] = ([], datetime.now())
+                        return []
+
+                # Execute batch concurrently
+                tasks = [fetch_with_cache(username) for username in uncached_usernames]
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Collect results (filter out exceptions)
+                for result in batch_results:
+                    if isinstance(result, Exception):
+                        print(f"[Twitter] Batch fetch exception: {result}")
+                        continue
+                    all_items.extend(result)
+
+            # Rate limit pause between batches (Twitter: 300 requests/15min = 1 request/3sec)
+            if i + batch_size < len(usernames):
+                pause_seconds = ContentConstants.TWITTER_RATE_LIMIT_PAUSE_SECONDS
+                print(f"[Twitter] Pausing {pause_seconds}s before next batch (rate limit protection)...")
+                await asyncio.sleep(pause_seconds)
 
         return all_items[:limit]
 

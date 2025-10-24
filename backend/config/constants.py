@@ -91,6 +91,10 @@ class ContentConstants:
     # Content limits
     MAX_CONTENT_ITEMS_TO_FETCH: int = int(os.getenv("MAX_CONTENT_ITEMS", "10000"))
 
+    # Twitter/X scraping optimization
+    TWITTER_BATCH_SIZE: int = int(os.getenv("TWITTER_BATCH_SIZE", "5"))  # Max concurrent requests per batch
+    TWITTER_RATE_LIMIT_PAUSE_SECONDS: int = int(os.getenv("TWITTER_RATE_LIMIT_PAUSE", "3"))  # Pause between batches
+
 
 class HistoricalConstants:
     """Constants for historical data service."""

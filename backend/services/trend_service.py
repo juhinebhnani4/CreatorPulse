@@ -261,11 +261,17 @@ class TrendDetectionService(BaseService):
         Returns:
             Topic name string
         """
+        # VALIDATION: Handle empty keywords (edge case that causes crashes)
+        if not keywords:
+            self.logger.warning("Empty keywords list provided to _extract_topic_name, returning 'Unknown Topic'")
+            return "Unknown Topic"
+
         if not self.nlp:
             # Fallback: Use longest n-gram from keywords
             ngrams = [kw for kw in keywords if ' ' in kw]
             if ngrams:
                 return ngrams[0].replace('_', ' ').title()
+            # Safe to access keywords[0] now (validated above)
             return keywords[0].replace('_', ' ').title()
 
         # Extract named entities from cluster texts
