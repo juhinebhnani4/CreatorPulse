@@ -97,7 +97,12 @@ export default function DashboardPage() {
   // Calculate draft status based on fetched data
   useEffect(() => {
     if (!latestNewsletter || !contentStats) {
-      setDraftStatus(hasSources ? 'empty' : 'empty');
+      // If no newsletter exists yet, check if we have content to generate from
+      if (hasSources && contentStats && contentStats.total_items > 0) {
+        setDraftStatus('scheduled');  // Show "Generate Draft Now" button
+      } else {
+        setDraftStatus('empty');  // Show sample article + setup
+      }
       return;
     }
 
