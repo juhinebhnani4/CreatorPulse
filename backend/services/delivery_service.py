@@ -113,8 +113,7 @@ class DeliveryService:
             delivery = self.db.create_delivery(
                 newsletter_id=newsletter_id,
                 workspace_id=workspace_id,
-                total_subscribers=len(subscribers),
-                started_at=datetime.now().isoformat()
+                total_subscribers=len(subscribers)
             )
 
             # Update delivery status to sending
