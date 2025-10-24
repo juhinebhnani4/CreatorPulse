@@ -60,17 +60,16 @@ class SchedulerService(BaseService):
         # Prepare job data
         # TODO (v1.5): Expose cron_expression in frontend UI for power users
         # Backend already supports it (worker.py:166-178), just needs UI controls
+        # Note: config and description fields were removed in migration 014
         job_data = {
             "workspace_id": request.workspace_id,
             "name": request.name,
-            "description": request.description,
             "schedule_type": request.schedule_type,
             "schedule_time": request.schedule_time,
             "schedule_days": request.schedule_days,
             "cron_expression": request.cron_expression,
             "timezone": request.timezone,
             "actions": request.actions,
-            "config": request.config,
             "is_enabled": request.is_enabled,
             "created_by": user_id,
             "status": "active" if request.is_enabled else "disabled"
