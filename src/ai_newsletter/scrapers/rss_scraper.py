@@ -170,12 +170,13 @@ class RSSFeedScraper(BaseScraper):
         title = raw_item.get('title', 'Untitled')
         link = raw_item.get('link', '')
         
-        # Parse published date
-        created_at = datetime.now()
+        # Parse published date (CRITICAL FIX #3: Always use timezone-aware datetimes)
+        from datetime import timezone
+        created_at = datetime.now(timezone.utc)
         if hasattr(raw_item, 'published_parsed') and raw_item.published_parsed:
-            created_at = datetime.fromtimestamp(mktime(raw_item.published_parsed))
+            created_at = datetime.fromtimestamp(mktime(raw_item.published_parsed), tz=timezone.utc)
         elif hasattr(raw_item, 'updated_parsed') and raw_item.updated_parsed:
-            created_at = datetime.fromtimestamp(mktime(raw_item.updated_parsed))
+            created_at = datetime.fromtimestamp(mktime(raw_item.updated_parsed), tz=timezone.utc)
         
         # Extract content
         content = ''

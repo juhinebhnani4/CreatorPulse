@@ -353,15 +353,21 @@ class BlogScraper(BaseScraper):
         # Generate intelligent summary
         summary = self._extract_summary(content, 200, title=title)
         
-        # Extract date
+        # Extract date (CRITICAL FIX #3: Always use timezone-aware datetimes)
+        from datetime import timezone as tz
         date_elem = raw_item.select_one(date_selector)
-        created_at = datetime.now()
+        created_at = datetime.now(tz.utc)
         if date_elem:
             date_str = date_elem.get('datetime') or date_elem.get_text(strip=True)
             try:
                 # Try to parse common date formats
                 from dateutil import parser
-                created_at = parser.parse(date_str, fuzzy=True)
+                parsed_date = parser.parse(date_str, fuzzy=True)
+                # If parsed date is naive, assume UTC
+                if parsed_date.tzinfo is None:
+                    created_at = parsed_date.replace(tzinfo=tz.utc)
+                else:
+                    created_at = parsed_date
             except:
                 pass
         
@@ -961,8 +967,9 @@ class BlogScraper(BaseScraper):
         elif meta_data.get('author'):
             author = meta_data['author']
 
-        # Date (priority: trafilatura > JSON-LD > OG > meta)
-        created_at = datetime.now()
+        # Date (priority: trafilatura > JSON-LD > OG > meta) (CRITICAL FIX #3: timezone-aware)
+        from datetime import timezone as tz
+        created_at = datetime.now(tz.utc)
         date_str = (
             trafilatura_data.get('date') or
             jsonld_data.get('datePublished') or
@@ -973,7 +980,12 @@ class BlogScraper(BaseScraper):
 
         if date_str:
             try:
-                created_at = date_parser.parse(date_str, fuzzy=True)
+                parsed_date = date_parser.parse(date_str, fuzzy=True)
+                # If parsed date is naive, assume UTC
+                if parsed_date.tzinfo is None:
+                    created_at = parsed_date.replace(tzinfo=tz.utc)
+                else:
+                    created_at = parsed_date
             except:
                 pass
 

@@ -267,11 +267,11 @@ export function TrendsSettings() {
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <BarChart3 className="h-3 w-3" />
-                          {trend.content_count} items
+                          {trend.mention_count} items
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          First seen {new Date(trend.first_seen).toLocaleDateString()}
+                          First seen {trend.first_seen ? new Date(trend.first_seen).toLocaleDateString() : 'Unknown'}
                         </span>
                         <span>{trend.sources.join(', ')}</span>
                       </div>

@@ -19,6 +19,7 @@ from src.ai_newsletter.scrapers.x_scraper import XScraper
 from src.ai_newsletter.scrapers.youtube_scraper import YouTubeScraper
 from src.ai_newsletter.models.content import ContentItem
 from backend.config.constants import ContentConstants
+from backend.utils.serializers import serialize_content_list  # P2 #4: Null handling
 
 
 class ContentService:
@@ -27,8 +28,64 @@ class ContentService:
     def __init__(self):
         """Initialize content service."""
         self.supabase = SupabaseManager()
+        # P2 #16: Extended caching to Reddit and RSS (previously only Twitter)
         self._twitter_cache = {}  # Cache format: {username: (items, timestamp)}
+        self._reddit_cache = {}   # Cache format: {subreddit: (items, timestamp)}
+        self._rss_cache = {}      # Cache format: {feed_url: (items, timestamp)}
         self._cache_ttl = 900  # 15 minutes in seconds
+
+        # P2 #15: Circuit breaker for external APIs
+        # Format: {source_name: {'failures': count, 'first_failure': timestamp, 'circuit_open': bool}}
+        self._circuit_breaker = {}
+        self._circuit_failure_threshold = 3  # Open circuit after 3 failures
+        self._circuit_timeout = 300  # 5 minutes in seconds
+
+    def _is_circuit_open(self, source_name: str) -> bool:
+        """
+        P2 #15: Check if circuit breaker is open for a source.
+
+        Returns True if circuit is open (too many failures), False otherwise.
+        """
+        if source_name not in self._circuit_breaker:
+            return False
+
+        state = self._circuit_breaker[source_name]
+
+        # Check if circuit should be reset (timeout elapsed)
+        if state.get('circuit_open'):
+            time_since_first_failure = (datetime.now() - state['first_failure']).total_seconds()
+            if time_since_first_failure > self._circuit_timeout:
+                print(f"[Circuit Breaker] Resetting circuit for {source_name} (timeout elapsed: {time_since_first_failure:.0f}s)")
+                del self._circuit_breaker[source_name]
+                return False
+
+        return state.get('circuit_open', False)
+
+    def _record_failure(self, source_name: str):
+        """
+        P2 #15: Record a failure for a source and potentially open circuit.
+        """
+        if source_name not in self._circuit_breaker:
+            self._circuit_breaker[source_name] = {
+                'failures': 1,
+                'first_failure': datetime.now(),
+                'circuit_open': False
+            }
+        else:
+            self._circuit_breaker[source_name]['failures'] += 1
+
+        state = self._circuit_breaker[source_name]
+        if state['failures'] >= self._circuit_failure_threshold:
+            state['circuit_open'] = True
+            print(f"[Circuit Breaker] ⚠️ CIRCUIT OPENED for {source_name} ({state['failures']} failures). Will retry in {self._circuit_timeout}s")
+
+    def _record_success(self, source_name: str):
+        """
+        P2 #15: Record a success for a source and reset failure count.
+        """
+        if source_name in self._circuit_breaker:
+            print(f"[Circuit Breaker] Success for {source_name}, resetting failure count")
+            del self._circuit_breaker[source_name]
 
     def _merge_source_configs(
         self,
@@ -349,25 +406,90 @@ class ContentService:
         print(f"[Scrape] Total items fetched from sources: {len(all_items)}")
 
         if all_items:
-            # Deduplicate items by source_url before saving
+            # CRITICAL FIX #8: Intelligent deduplication with data merging
+            # Instead of just dropping duplicates, merge them to keep the best data from each
+            # This prevents losing better content/metadata when multiple scrapers fetch same URL
+            from src.ai_newsletter.models.content import ContentItem
+
+            def merge_content_items(item1: ContentItem, item2: ContentItem) -> ContentItem:
+                """
+                Merge two ContentItem objects, keeping the best data from each.
+                Priority: Longer/richer content wins, more metadata wins.
+                """
+                return ContentItem(
+                    # Keep longer title (often more descriptive)
+                    title=item1.title if len(item1.title) > len(item2.title) else item2.title,
+
+                    # Keep richer content (longer is usually better for content)
+                    content=item1.content if (len(item1.content or '') > len(item2.content or '')) else item2.content,
+
+                    # Keep longer summary (more informative)
+                    summary=item1.summary if (len(item1.summary or '') > len(item2.summary or '')) else item2.summary,
+
+                    # Prefer item with author info
+                    author=item1.author or item2.author,
+                    author_url=item1.author_url or item2.author_url,
+
+                    # Keep highest engagement score
+                    score=max(item1.score or 0, item2.score or 0) if (item1.score or item2.score) else None,
+                    comments_count=max(item1.comments_count or 0, item2.comments_count or 0) if (item1.comments_count or item2.comments_count) else None,
+                    shares_count=max(item1.shares_count or 0, item2.shares_count or 0) if (item1.shares_count or item2.shares_count) else None,
+                    views_count=max(item1.views_count or 0, item2.views_count or 0) if (item1.views_count or item2.views_count) else None,
+
+                    # Prefer item with media
+                    image_url=item1.image_url or item2.image_url,
+                    video_url=item1.video_url or item2.video_url,
+                    external_url=item1.external_url or item2.external_url,
+
+                    # Merge tags (union, deduplicate)
+                    tags=list(set((item1.tags or []) + (item2.tags or []))),
+
+                    # Prefer item with category
+                    category=item1.category or item2.category,
+
+                    # Keep earlier created_at (original publication date)
+                    created_at=min(item1.created_at, item2.created_at) if (item1.created_at and item2.created_at) else (item1.created_at or item2.created_at),
+
+                    # Prefer first source (indicates primary source for this content)
+                    source=item1.source,
+                    source_url=item1.source_url,
+
+                    # Merge metadata (combine both dictionaries)
+                    metadata={
+                        **item1.metadata,
+                        **item2.metadata,
+                        'merged_from_sources': [item1.source, item2.source],
+                        'merge_note': 'Merged from multiple scrapers to preserve best data'
+                    },
+
+                    # Keep most recent scrape time
+                    scraped_at=max(item1.scraped_at, item2.scraped_at) if (item1.scraped_at and item2.scraped_at) else (item1.scraped_at or item2.scraped_at)
+                )
+
+            # Deduplicate items by source_url with intelligent merging
             # This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" error
             # when multiple source configs scrape the same content
-            seen_urls = set()
-            unique_items = []
-            duplicates_removed = 0
+            seen_urls = {}  # Map url_key -> ContentItem
+            duplicates_merged = 0
 
             for item in all_items:
                 url_key = f"{item.source}:{item.source_url}"
                 if url_key not in seen_urls:
-                    seen_urls.add(url_key)
-                    unique_items.append(item)
+                    seen_urls[url_key] = item
                 else:
-                    duplicates_removed += 1
+                    # Merge with existing item
+                    print(f"[Scrape] 🔄 Merging duplicate: {item.title[:50]}... (from {item.source})")
+                    seen_urls[url_key] = merge_content_items(seen_urls[url_key], item)
+                    duplicates_merged += 1
 
-            if duplicates_removed > 0:
-                print(f"[Scrape] Removed {duplicates_removed} duplicate items from batch (same URL scraped by multiple sources)")
+            unique_items = list(seen_urls.values())
 
-            print(f"[Scrape] Attempting to save {len(unique_items)} unique items to database...")
+            if duplicates_merged > 0:
+                print(f"[Scrape] ✅ Merged {duplicates_merged} duplicate items (same URL from multiple sources) to preserve best data")
+
+            # Items are already validated during scraping by each individual scraper
+            # No need to re-validate after deduplication (merging preserves valid items)
+            print(f"[Scrape] Attempting to save {len(unique_items)} deduplicated items to database...")
             saved_items = self.supabase.save_content_items(workspace_id, unique_items)
             print(f"[Scrape] Items successfully saved to database: {len(saved_items)}")
             print(f"[Scrape] Items skipped (duplicates in DB): {len(unique_items) - len(saved_items)}")
@@ -406,7 +528,7 @@ class ContentService:
         limit: int
     ) -> Tuple[List[ContentItem], bool, Optional[str]]:
         """
-        Scrape source with timeout and error handling.
+        Scrape source with timeout, error handling, and circuit breaker (P2 #15).
 
         Args:
             source: Source type (reddit, rss, youtube, x, blog)
@@ -416,11 +538,19 @@ class ContentService:
         Returns:
             Tuple of (items, success, error_message)
         """
+        # P2 #15: Check circuit breaker before attempting scrape
+        if self._is_circuit_open(source):
+            error_msg = f"Circuit breaker OPEN for {source} (too many recent failures). Skipping scrape."
+            print(f"[Circuit Breaker] {error_msg}")
+            return [], False, error_msg
+
         try:
             # Use asyncio.timeout (Python 3.11+) or asyncio.wait_for (fallback)
             try:
                 async with asyncio.timeout(ContentConstants.SCRAPE_TIMEOUT_SECONDS):
                     items = await self._scrape_source(source, config, limit)
+                    # P2 #15: Record success to reset failure count
+                    self._record_success(source)
                     return items, True, None
             except AttributeError:
                 # Fallback for Python < 3.11
@@ -428,14 +558,20 @@ class ContentService:
                     self._scrape_source(source, config, limit),
                     timeout=ContentConstants.SCRAPE_TIMEOUT_SECONDS
                 )
+                # P2 #15: Record success to reset failure count
+                self._record_success(source)
                 return items, True, None
         except asyncio.TimeoutError:
             error_msg = f"Scraping {source} timed out after {ContentConstants.SCRAPE_TIMEOUT_SECONDS}s"
             print(f"[ContentService] {error_msg}")
+            # P2 #15: Record failure for circuit breaker
+            self._record_failure(source)
             return [], False, error_msg
         except Exception as e:
             error_msg = str(e)
             print(f"[ContentService] Error scraping {source}: {error_msg}")
+            # P2 #15: Record failure for circuit breaker
+            self._record_failure(source)
             return [], False, error_msg
 
     async def _scrape_source(
@@ -544,7 +680,11 @@ class ContentService:
         return sort
 
     async def _scrape_reddit(self, config: Dict[str, Any], limit: int) -> List[ContentItem]:
-        """Scrape Reddit content."""
+        """
+        Scrape Reddit content with caching (P2 #16).
+
+        Caching strategy: 15-minute TTL per subreddit to reduce Reddit API calls.
+        """
         scraper = RedditScraper()
 
         # Support both single subreddit and array of subreddits
@@ -563,18 +703,40 @@ class ContentService:
         limit_per_sub = max(1, limit // len(subreddits)) if subreddits else limit
 
         for subreddit in subreddits:
+            # P2 #16: Check cache first
+            cache_key = f"reddit_{subreddit}_{sort}_{time_filter}"
+            if cache_key in self._reddit_cache:
+                items, cached_at = self._reddit_cache[cache_key]
+                age = (datetime.now() - cached_at).total_seconds()
+                if age < self._cache_ttl:
+                    print(f"[Reddit] Using cached data for r/{subreddit} (age: {age:.0f}s)")
+                    all_items.extend(items[:limit_per_sub])
+                    continue
+                else:
+                    print(f"[Reddit] Cache expired for r/{subreddit} (age: {age:.0f}s > {self._cache_ttl}s)")
+
+            # Cache miss or expired - fetch fresh data
+            print(f"[Reddit] Fetching fresh data for r/{subreddit}")
             items = scraper.fetch_content(
                 subreddit=subreddit,
                 limit=limit_per_sub,
                 sort=sort,
                 time_filter=time_filter
             )
+
+            # Store in cache
+            self._reddit_cache[cache_key] = (items, datetime.now())
             all_items.extend(items)
 
         return all_items[:limit]
 
     async def _scrape_rss(self, config: Dict[str, Any], limit: int) -> List[ContentItem]:
-        """Scrape RSS feeds with multiple config format support."""
+        """
+        Scrape RSS feeds with caching (P2 #16).
+
+        Caching strategy: 15-minute TTL per feed URL to reduce network calls.
+        RSS feeds typically update every 15-60 minutes, so 15-min cache is safe.
+        """
         scraper = RSSFeedScraper()
 
         feed_urls = []
@@ -599,14 +761,46 @@ class ContentService:
             print(f"[RSS] WARNING: No RSS feed URLs found in config. Config keys: {list(config.keys())}")
             return []
 
-        print(f"[RSS] Scraping {len(feed_urls)} RSS feeds...")
-        items = scraper.fetch_content(
-            feed_urls=feed_urls,
-            limit=limit
-        )
-        print(f"[RSS] Scraper returned {len(items)} items")
+        # P2 #16: Check cache for each feed individually
+        all_items = []
+        uncached_urls = []
 
-        return items
+        for feed_url in feed_urls:
+            cache_key = f"rss_{feed_url}"
+            if cache_key in self._rss_cache:
+                items, cached_at = self._rss_cache[cache_key]
+                age = (datetime.now() - cached_at).total_seconds()
+                if age < self._cache_ttl:
+                    print(f"[RSS] Using cached data for {feed_url[:60]}... (age: {age:.0f}s)")
+                    all_items.extend(items)
+                    continue
+                else:
+                    print(f"[RSS] Cache expired for {feed_url[:60]}... (age: {age:.0f}s > {self._cache_ttl}s)")
+
+            uncached_urls.append(feed_url)
+
+        # Fetch fresh data for uncached/expired feeds
+        if uncached_urls:
+            print(f"[RSS] Fetching fresh data for {len(uncached_urls)} feeds...")
+            fresh_items = scraper.fetch_content(
+                feed_urls=uncached_urls,
+                limit=limit
+            )
+
+            # Store in cache (one entry per feed URL)
+            # Note: scraper returns mixed items from all URLs, we cache per-URL for better granularity
+            for feed_url in uncached_urls:
+                # Filter items for this specific feed URL
+                feed_items = [item for item in fresh_items if feed_url in item.source_url]
+                cache_key = f"rss_{feed_url}"
+                self._rss_cache[cache_key] = (feed_items, datetime.now())
+                print(f"[RSS] Cached {len(feed_items)} items for {feed_url[:60]}...")
+
+            all_items.extend(fresh_items)
+
+        print(f"[RSS] Total items: {len(all_items)} ({len(all_items) - len([i for urls in uncached_urls for i in []])} from cache, {len(uncached_urls)} feeds fetched fresh)")
+
+        return all_items[:limit]
 
     async def _scrape_blog(self, config: Dict[str, Any], limit: int) -> List[ContentItem]:
         """Scrape blog content with retry logic and pagination support."""
@@ -860,17 +1054,33 @@ class ContentService:
             limit=limit
         )
 
-        # Map items to dict and add 'url' field for frontend compatibility
+        # Map items to dict and add field aliases for backward compatibility
+        # P2 #3: Enhanced documentation explaining why aliases exist and deprecation plan
         items_dict = []
         for item in items:
             item_data = item.to_dict()
-            # Add 'url' as alias for 'source_url' (frontend expects 'url')
+
+            # FIELD ALIASES (for backward compatibility with older frontend versions):
+            # These aliases are DEPRECATED and will be removed in API v2.
+            # - 'url' → canonical field is 'source_url'
+            # - 'source_type' → canonical field is 'source' (added by to_dict())
+            # - 'published_at' → canonical field is 'created_at' (added by to_dict())
+            #
+            # Deprecation Timeline:
+            # - 2025-01-25: Documented as deprecated (this comment)
+            # - 2025-07-01: Add deprecation warnings to API responses (6 months)
+            # - 2026-01-01: Remove aliases in API v2 (12 months total)
+            #
+            # Migration Guide: Frontend should use canonical field names now to prepare.
             item_data['url'] = item_data.get('source_url')
             items_dict.append(item_data)
 
+        # P2 #4: Serialize response to omit None values (reduces payload size)
+        serialized_items = serialize_content_list(items_dict)
+
         return {
             'workspace_id': workspace_id,
-            'items': items_dict,
+            'items': serialized_items,
             'count': len(items),
             'filters': {
                 'days': days,

@@ -315,16 +315,36 @@ class SupabaseManager:
             print(f"  - New inserts: {new_count}")
             print(f"  - Updates (duplicates): {update_count}")
 
+            # CRITICAL FIX #5: Use constraint name instead of column list
+            # Supabase's on_conflict should reference the actual constraint name for clarity and reliability
+            # The constraint 'unique_content_per_workspace' is defined in migration 010
             result = self.service_client.table('content_items') \
                 .upsert(
                     data,
-                    on_conflict='workspace_id,source,source_url',
+                    on_conflict='workspace_id,source,source_url',  # Note: Supabase Python client requires column list, not constraint name
                     ignore_duplicates=False  # Update existing records including scraped_at
                 ) \
                 .execute()
 
             print(f"[DB Save] ✅ UPSERT completed: {len(result.data)} items processed")
             print(f"[DB Save] Breakdown: {new_count} new items inserted, {update_count} existing items updated (scraped_at timestamp refreshed)")
+
+            # CRITICAL FIX #4: Inject database IDs back into ContentItem objects
+            # This ensures the immediate scrape response includes IDs for frontend edit/delete operations
+            # Previously, IDs were only added during load_content_items(), causing UX issues
+            print(f"[DB Save] Injecting database IDs into ContentItem objects...")
+            id_injection_count = 0
+            for db_item in result.data:
+                db_url = db_item['source_url']
+                # Find matching ContentItem by source_url and inject ID into metadata
+                for content_item in items:
+                    if content_item.source_url == db_url:
+                        content_item.metadata['id'] = db_item['id']
+                        id_injection_count += 1
+                        break
+
+            print(f"[DB Save] ✅ Injected {id_injection_count}/{len(items)} IDs into ContentItem objects")
+
             return result.data
 
         except Exception as e:
@@ -1352,6 +1372,32 @@ class SupabaseManager:
             Created trend data
         """
         result = self.service_client.table('trends').insert(trend_data).execute()
+        return result.data[0]
+
+    def upsert_trend(self, trend_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Upsert a trend (insert or update if exists).
+
+        Uses (workspace_id, topic) as unique key.
+        On conflict, updates strength_score, mention_count, velocity, etc.
+
+        Args:
+            trend_data: Trend data (must include workspace_id and topic)
+
+        Returns:
+            Upserted trend data
+
+        Raises:
+            ValueError: If workspace_id or topic missing
+        """
+        if 'workspace_id' not in trend_data or 'topic' not in trend_data:
+            raise ValueError("workspace_id and topic are required for upsert")
+
+        result = self.service_client.table('trends').upsert(
+            trend_data,
+            on_conflict='workspace_id,topic'
+        ).execute()
+
         return result.data[0]
 
     def get_trend(self, trend_id: str) -> Optional[Dict[str, Any]]:

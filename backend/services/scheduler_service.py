@@ -9,7 +9,7 @@ This service handles:
 """
 
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.models.scheduler import (
     SchedulerJobCreate,
@@ -434,7 +434,8 @@ class SchedulerService(BaseService):
         active_jobs = [j for j in jobs if j.is_enabled and j.next_run_at]
         if active_jobs:
             next_job = min(active_jobs, key=lambda j: j.next_run_at)
-            next_run = datetime.fromisoformat(next_job.next_run_at.replace('Z', '+00:00'))
+            # next_job.next_run_at is already a datetime object (from SchedulerJobResponse model)
+            next_run = next_job.next_run_at
             time_until = next_run - datetime.now(timezone.utc)
             hours = int(time_until.total_seconds() / 3600)
 

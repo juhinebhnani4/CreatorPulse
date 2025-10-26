@@ -109,7 +109,42 @@ class BaseScraper(ABC):
             NotImplementedError: If not implemented by subclass
         """
         raise NotImplementedError("Subclasses must implement _parse_item()")
-    
+
+    def _truncate_title(self, text: str, max_len: int = 100) -> str:
+        """
+        P2 #14: Standardize title truncation across all scrapers.
+
+        Truncates title intelligently at word boundary with ellipsis.
+        Previously only X scraper had this logic (x_scraper.py:545-547).
+        Now all scrapers can use this helper for consistent truncation.
+
+        Args:
+            text: Title text to truncate
+            max_len: Maximum length (default: 100 chars)
+
+        Returns:
+            Truncated title with '...' if needed
+
+        Examples:
+            >>> _truncate_title("Short title", 100)
+            'Short title'
+
+            >>> _truncate_title("This is a very long title that exceeds limit", 30)
+            'This is a very long title...'
+        """
+        if not text or len(text) <= max_len:
+            return text
+
+        # Truncate at word boundary to avoid cutting mid-word
+        truncated = text[:max_len - 3]  # Reserve 3 chars for '...'
+
+        # Find last space to break at word boundary
+        last_space = truncated.rfind(' ')
+        if last_space > 0:
+            truncated = truncated[:last_space]
+
+        return truncated + '...'
+
     def to_dataframe(self, items: List[ContentItem]) -> pd.DataFrame:
         """
         Convert a list of ContentItems to a pandas DataFrame.
@@ -154,6 +189,23 @@ class BaseScraper(ABC):
                 self.logger.warning(f"[Validation FAILED] Item missing required field: {field}")
                 return False
 
+        # P2 #12: Check timezone-aware datetimes (catches P1 #5 regressions)
+        if hasattr(item.created_at, 'tzinfo') and item.created_at.tzinfo is None:
+            self.logger.error(
+                f"[Validation FAILED] Timezone-naive datetime detected in created_at! "
+                f"Title: '{item.title[:50]}...' (URL: {item.source_url}). "
+                f"Fix: Use datetime.now(timezone.utc) instead of datetime.now()"
+            )
+            return False
+
+        if hasattr(item, 'scraped_at') and item.scraped_at is not None:
+            if hasattr(item.scraped_at, 'tzinfo') and item.scraped_at.tzinfo is None:
+                self.logger.error(
+                    f"[Validation FAILED] Timezone-naive datetime detected in scraped_at! "
+                    f"Title: '{item.title[:50]}...' (URL: {item.source_url})"
+                )
+                return False
+
         # Check title quality - reject generic/empty titles
         title = getattr(item, 'title', '')
         if title.strip().lower() in ['untitled', 'no title', 'n/a', '']:
@@ -162,12 +214,20 @@ class BaseScraper(ABC):
             )
             return False
 
-        # Check content quality - must have substantial text
+        # P2 #13: Enhanced content validation - check for empty content after stripping
         content = getattr(item, 'content', '')
         if not content or len(content.strip()) < min_content_length:
             self.logger.warning(
                 f"[Validation FAILED] Item has insufficient content: {len(content.strip())} chars "
                 f"(minimum: {min_content_length}) - Title: '{title[:50]}...' (URL: {item.source_url})"
+            )
+            return False
+
+        # P2 #13: Additional check - content shouldn't be ONLY whitespace even if long
+        if content and not content.strip():
+            self.logger.warning(
+                f"[Validation FAILED] Item has content that is only whitespace "
+                f"(length: {len(content)}, stripped: 0) - Title: '{title[:50]}...' (URL: {item.source_url})"
             )
             return False
 

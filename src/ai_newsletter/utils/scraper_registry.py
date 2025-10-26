@@ -77,18 +77,49 @@ class ScraperRegistry:
     @classmethod
     def auto_discover(cls):
         """
+        P2 #8: Enhanced auto-discovery with better error handling and logging.
+
         Automatically discover and register scrapers from the scrapers package.
+        Now works correctly after P2 #2 fix (XScraper and YouTubeScraper added to __init__.py).
+
+        Discovers:
+        - RedditScraper → 'reddit'
+        - RSSFeedScraper → 'rssfeed'
+        - BlogScraper → 'blog'
+        - XScraper → 'x'
+        - YouTubeScraper → 'youtube'
         """
-        from .. import scrapers
-        
-        # Get all classes from the scrapers module
-        for name, obj in inspect.getmembers(scrapers):
-            if (inspect.isclass(obj) and 
-                issubclass(obj, BaseScraper) and 
-                obj is not BaseScraper):
-                # Register using lowercase source_name if available
-                scraper_name = name.replace('Scraper', '').lower()
-                cls.register(scraper_name, obj)
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            from .. import scrapers
+
+            discovered_count = 0
+
+            # Get all classes from the scrapers module
+            for name, obj in inspect.getmembers(scrapers):
+                if (inspect.isclass(obj) and
+                    issubclass(obj, BaseScraper) and
+                    obj is not BaseScraper):
+
+                    # Register using lowercase source_name if available
+                    scraper_name = name.replace('Scraper', '').lower()
+
+                    # Handle special cases for naming consistency
+                    if scraper_name == 'rssfeed':
+                        scraper_name = 'rss'  # Map RSSFeedScraper → 'rss'
+
+                    cls.register(scraper_name, obj)
+                    logger.debug(f"Auto-discovered scraper: {name} → '{scraper_name}'")
+                    discovered_count += 1
+
+            logger.info(f"ScraperRegistry auto-discovery complete: {discovered_count} scrapers registered")
+
+        except ImportError as e:
+            logger.error(f"Failed to import scrapers module during auto-discovery: {e}")
+        except Exception as e:
+            logger.error(f"Error during scraper auto-discovery: {e}")
 
 
 # Auto-discover scrapers on import

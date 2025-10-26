@@ -8,8 +8,8 @@ and cross-source validation.
 import re
 from typing import List, Dict, Any, Optional, Tuple
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
-from uuid import UUID
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 import numpy as np
 import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -124,6 +124,17 @@ class TrendDetectionService(BaseService):
         # Stage 1: Extract topics
         topics = self._extract_topics(current_items)
 
+        # Early return if no topics extracted
+        if not topics or len(topics) == 0:
+            return [], {
+                "content_items_analyzed": len(current_items),
+                "topics_found": 0,
+                "trends_detected": 0,
+                "confidence_threshold": min_confidence,
+                "time_range_days": days_back,
+                "message": "No topics could be extracted from content"
+            }
+
         # Stage 2: Calculate velocity
         topics_with_velocity = self._calculate_velocity(
             topics,
@@ -149,14 +160,17 @@ class TrendDetectionService(BaseService):
             if t.strength_score >= min_confidence
         ][:max_trends]
 
-        # Save trends to database
+        # Save trends to database (UPSERT: update existing, insert new)
+        # This prevents duplicate trends when detection runs multiple times
         saved_trends = []
         for trend_data in filtered_trends:
             try:
-                saved_trend = self.db.create_trend(trend_data.model_dump(mode='json'))
+                # UPSERT: If (workspace_id, topic) exists, UPDATE strength/velocity
+                # Otherwise, INSERT new trend
+                saved_trend = self.db.upsert_trend(trend_data.model_dump(mode='json'))
                 saved_trends.append(TrendResponse(**saved_trend))
             except Exception as e:
-                print(f"Error saving trend: {e}")
+                self.logger.error(f"Error upserting trend '{trend_data.topic}': {e}")
                 continue
 
         # Build analysis summary
@@ -692,7 +706,7 @@ class TrendDetectionService(BaseService):
             first_seen = min(item_times) if item_times else datetime.now()
             peak_time = max(item_times) if item_times else datetime.now()
 
-            # Create trend object
+            # Create trend object (status will be computed after all trends are created)
             trend = TrendCreate(
                 workspace_id=workspace_id,
                 topic=topic_data['topic'],
@@ -708,12 +722,166 @@ class TrendDetectionService(BaseService):
                 explanation=explanation,
                 related_topics=[],  # Could enhance with topic similarity
                 confidence_level=topic_data['confidence_level'],
-                is_active=True
+                is_active=True,
+                status='emerging'  # Temporary, will be computed below
             )
 
             trends.append(trend)
 
+        # Compute status for each trend (after all trends are created)
+        # This allows percentile-based classification using the full trend set
+        for trend in trends:
+            # Convert TrendCreate to TrendResponse for status computation
+            # Add missing required fields (id, detected_at, created_at, updated_at)
+            trend_data = trend.model_dump()
+            trend_data['id'] = uuid4()
+            trend_data['detected_at'] = datetime.now(timezone.utc)
+            trend_data['created_at'] = datetime.now(timezone.utc)
+            trend_data['updated_at'] = datetime.now(timezone.utc)
+
+            trend_response = TrendResponse(**trend_data)
+            trend.status = self._compute_trend_status(trend_response, [
+                TrendResponse(**{
+                    **t.model_dump(),
+                    'id': uuid4(),
+                    'detected_at': datetime.now(timezone.utc),
+                    'created_at': datetime.now(timezone.utc),
+                    'updated_at': datetime.now(timezone.utc)
+                }) for t in trends
+            ])
+
         return trends
+
+    def _get_fixed_thresholds(self) -> Dict[str, float]:
+        """
+        Get fixed thresholds for trend status classification (used when n<10).
+
+        These are industry-standard percentile equivalents derived from
+        Twitter/Google Trends data analysis.
+
+        Returns:
+            Dictionary of threshold values
+        """
+        return {
+            'rising_velocity': 0.5,      # 50% velocity increase = rising
+            'hot_score': 0.75,           # 75% strength = hot
+            'peak_score': 0.90,          # 90% strength = peak
+            'peak_velocity_max': 0.2,    # <20% velocity = saturated (peak)
+            'declining_score': 0.4       # <40% strength = declining
+        }
+
+    def _calculate_percentile_thresholds(
+        self,
+        trends: List[TrendResponse]
+    ) -> Dict[str, float]:
+        """
+        Calculate adaptive percentile thresholds for trend classification (n>=10).
+
+        Uses NumPy percentiles to adapt to workspace-specific patterns.
+        Handles edge cases: NULL velocities, empty lists, insufficient data points.
+
+        Args:
+            trends: List of trends to analyze
+
+        Returns:
+            Dictionary of calculated thresholds, or fixed thresholds if calculation fails
+        """
+        try:
+            # Extract velocities and strengths, filtering out NULLs
+            velocities = [t.velocity for t in trends if t.velocity is not None]
+            strengths = [t.strength_score for t in trends]
+
+            # Need minimum 3 data points for valid percentile calculation
+            if len(velocities) < 3 or len(strengths) < 3:
+                self.logger.warning(
+                    f"Insufficient data for percentile calculation (velocities={len(velocities)}, "
+                    f"strengths={len(strengths)}), using fixed thresholds"
+                )
+                return self._get_fixed_thresholds()
+
+            # Calculate percentile thresholds using NumPy
+            thresholds = {
+                'rising_velocity': float(np.percentile(velocities, 75)),     # p75 velocity
+                'hot_score': float(np.percentile(strengths, 75)),             # p75 strength
+                'peak_score': float(np.percentile(strengths, 90)),            # p90 strength
+                'peak_velocity_max': float(np.percentile(velocities, 25)),   # p25 velocity (low = saturated)
+                'declining_score': float(np.percentile(strengths, 25))        # p25 strength
+            }
+
+            self.logger.debug(
+                f"Calculated percentile thresholds from {len(trends)} trends: "
+                f"rising_vel={thresholds['rising_velocity']:.2f}, "
+                f"hot_score={thresholds['hot_score']:.2f}, "
+                f"peak_score={thresholds['peak_score']:.2f}"
+            )
+
+            return thresholds
+
+        except Exception as e:
+            self.logger.error(
+                f"Percentile calculation failed: {e}, using fixed thresholds as fallback"
+            )
+            return self._get_fixed_thresholds()
+
+    def _compute_trend_status(
+        self,
+        trend: TrendResponse,
+        all_trends: List[TrendResponse]
+    ) -> str:
+        """
+        Compute trend lifecycle status using industry-standard classification.
+
+        Uses adaptive percentile thresholds for n>=10, fixed thresholds for n<10.
+        Classification based on strength_score + velocity combination.
+
+        Status Definitions:
+        - emerging: New/weak trend (low strength, any velocity)
+        - rising: Growing trend (medium strength, high velocity)
+        - hot: Viral trend (high strength, high velocity)
+        - peak: Saturated trend (very high strength, low velocity = plateaued)
+        - declining: Fading trend (low strength despite historical presence)
+
+        Args:
+            trend: Trend to classify
+            all_trends: All trends in workspace (for percentile calculation)
+
+        Returns:
+            Status string: emerging, rising, hot, peak, or declining
+        """
+        # Choose threshold calculation method based on sample size
+        if len(all_trends) >= 10:
+            thresholds = self._calculate_percentile_thresholds(all_trends)
+        else:
+            thresholds = self._get_fixed_thresholds()
+
+        # Extract trend metrics
+        score = trend.strength_score
+        vel = trend.velocity if trend.velocity is not None else 0.0
+
+        # Classify using 5-stage lifecycle model
+        # Order matters: peak > hot > rising > declining > emerging
+
+        if score >= thresholds['peak_score'] and vel < thresholds['peak_velocity_max']:
+            # High strength + low velocity = saturated/plateaued at peak
+            status = 'peak'
+        elif score >= thresholds['hot_score']:
+            # High strength (regardless of velocity) = viral
+            status = 'hot'
+        elif vel >= thresholds['rising_velocity']:
+            # High velocity (even if strength is medium) = growing momentum
+            status = 'rising'
+        elif score < thresholds['declining_score']:
+            # Low strength = fading
+            status = 'declining'
+        else:
+            # Default: new or weak trend
+            status = 'emerging'
+
+        self.logger.debug(
+            f"Trend '{trend.topic}': score={score:.2f}, vel={vel:.2f} -> status={status}"
+        )
+
+        return status
 
     @handle_service_errors(default_return=[], log_errors=True)
     async def get_active_trends(

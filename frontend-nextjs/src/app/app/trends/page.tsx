@@ -367,7 +367,7 @@ function TrendCard({ trend }: { trend: Trend }) {
       <div className="grid grid-cols-4 gap-4 pt-4 border-t border-border">
         <div>
           <p className="text-xs text-muted-foreground mb-1">Mentions</p>
-          <p className="text-sm font-semibold">{trend.content_count}</p>
+          <p className="text-sm font-semibold">{trend.mention_count}</p>
         </div>
         <div>
           <p className="text-xs text-muted-foreground mb-1">Sources</p>
@@ -381,7 +381,7 @@ function TrendCard({ trend }: { trend: Trend }) {
           <p className="text-xs text-muted-foreground mb-1">First Seen</p>
           <p className="text-sm font-semibold flex items-center gap-1">
             <Clock className="w-3 h-3" />
-            {new Date(trend.first_seen).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            {trend.first_seen ? new Date(trend.first_seen).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Unknown'}
           </p>
         </div>
       </div>
@@ -400,7 +400,7 @@ function TrendCard({ trend }: { trend: Trend }) {
 
       {/* View Details */}
       <Button variant="ghost" size="sm" className="w-full mt-4">
-        View {trend.key_content_ids.length} Related Items
+        View {trend.key_content_item_ids.length} Related Items
         <ChevronRight className="w-4 h-4 ml-2" />
       </Button>
     </Card>

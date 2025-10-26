@@ -3,8 +3,12 @@ Content data models for scraped items.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
+import logging
+
+# P2 #5: Add logging for from_dict() field removal warnings
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -49,7 +53,7 @@ class ContentItem:
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     # Internal fields
-    scraped_at: datetime = field(default_factory=datetime.now)
+    scraped_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -96,15 +100,54 @@ class ContentItem:
         # Create a copy to avoid modifying original
         data = data.copy()
 
+        # P2 #5: Log when removing fields (helps debug data loss issues)
         # Remove frontend-specific fields that aren't in the dataclass
+        removed_fields = []
+
+        if 'source_type' in data:
+            removed_fields.append(f"source_type={data['source_type']}")
         data.pop('source_type', None)  # Added by to_dict() for frontend
+
+        if 'url' in data:
+            removed_fields.append(f"url={data['url'][:50]}...")
         data.pop('url', None)  # Added by backend for frontend
+
+        if 'published_at' in data:
+            removed_fields.append(f"published_at={data['published_at']}")
         data.pop('published_at', None)  # Alias for created_at
+
+        if 'adjusted_score' in data:
+            removed_fields.append(f"adjusted_score={data['adjusted_score']}")
         data.pop('adjusted_score', None)  # Added by feedback service
+
+        if 'original_score' in data:
+            removed_fields.append(f"original_score={data['original_score']}")
         data.pop('original_score', None)  # Added by feedback/trend boosting
+
+        if 'adjustments' in data:
+            removed_fields.append("adjustments=<dict>")
         data.pop('adjustments', None)  # Added by feedback service
+
+        if 'trend_boosted' in data:
+            removed_fields.append(f"trend_boosted={data['trend_boosted']}")
         data.pop('trend_boosted', None)  # Added by trend boosting
+
+        if 'id' in data:
+            removed_fields.append(f"id={data['id']}")
         data.pop('id', None)  # Database ID, not part of ContentItem dataclass
+
+        # Log if we removed any fields (debug level - not a warning unless unexpected)
+        if removed_fields:
+            logger.debug(f"from_dict() removed expected alias fields: {', '.join(removed_fields)}")
+
+        # Check for unexpected fields (these might indicate data model mismatch)
+        expected_fields = set(cls.__dataclass_fields__.keys())
+        unexpected = set(data.keys()) - expected_fields
+        if unexpected:
+            logger.warning(
+                f"from_dict() received unexpected fields that will be IGNORED: {unexpected}. "
+                f"This may indicate a data model mismatch between frontend and backend."
+            )
 
         # Convert ISO strings back to datetime objects
         if isinstance(data.get('created_at'), str):

@@ -22,7 +22,7 @@ SELECT
     topic,
     COUNT(*) as duplicate_count,
     ARRAY_AGG(id ORDER BY strength_score DESC, updated_at DESC) as all_trend_ids,
-    ARRAY_AGG(id ORDER BY strength_score DESC, updated_at DESC)[1] as trend_to_keep
+    (ARRAY_AGG(id ORDER BY strength_score DESC, updated_at DESC))[1] as trend_to_keep
 FROM trends
 WHERE is_active = true
 GROUP BY workspace_id, topic

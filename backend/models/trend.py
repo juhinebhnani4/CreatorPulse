@@ -68,6 +68,11 @@ class TrendBase(BaseModel):
         description="Whether trend is currently active",
         examples=[True, False]
     )
+    status: str = Field(
+        default="emerging",
+        description="Trend lifecycle status: emerging (new/weak), rising (growing), hot (viral), peak (saturated), declining (fading)",
+        examples=["emerging", "rising", "hot", "peak", "declining"]
+    )
 
 
 class TrendCreate(TrendBase):

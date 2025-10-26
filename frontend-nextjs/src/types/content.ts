@@ -1,13 +1,16 @@
 /**
  * ContentItem as returned from backend API
  * All fields use snake_case to match backend response
+ *
+ * CRITICAL FIX #6: Use strict union types for source fields
+ * This ensures TypeScript catches invalid source values at compile-time
  */
 export interface ContentItem {
   id: string;
   workspace_id: string;
   title: string;
-  source: string; // reddit, rss, blog, x, youtube
-  source_type: string; // Same as source (for compatibility)
+  source: 'reddit' | 'rss' | 'x' | 'youtube' | 'blog'; // Strict union, NOT string
+  source_type: 'reddit' | 'rss' | 'x' | 'youtube' | 'blog'; // Same as source (for compatibility)
   source_url: string;
   content?: string;
   summary?: string;

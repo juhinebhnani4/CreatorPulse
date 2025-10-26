@@ -6,6 +6,7 @@
  */
 
 export type ConfidenceLevel = 'low' | 'medium' | 'high';
+export type TrendStatus = 'emerging' | 'rising' | 'hot' | 'peak' | 'declining';
 
 export interface Trend {
   id: string;
@@ -34,6 +35,7 @@ export interface Trend {
   related_topics: string[];
   confidence_level: ConfidenceLevel;
   is_active: boolean;
+  status: TrendStatus; // Lifecycle status: emerging → rising → hot → peak → declining
 
   // Metadata
   detected_at: string;

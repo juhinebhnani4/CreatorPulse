@@ -10,7 +10,7 @@ interface Activity {
   type: 'scrape' | 'generate' | 'send' | 'schedule';
   title: string;
   description: string;
-  timestamp: Date;
+  timestamp: string;  // ISO date string from API
   status: 'success' | 'pending' | 'scheduled';
 }
 
@@ -24,7 +24,7 @@ const mockActivities: Activity[] = [
     type: 'schedule',
     title: 'Next Newsletter Scheduled',
     description: 'Tomorrow at 8:00 AM',
-    timestamp: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    timestamp: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     status: 'scheduled',
   },
   {
@@ -32,7 +32,7 @@ const mockActivities: Activity[] = [
     type: 'scrape',
     title: 'Content Scraped',
     description: '25 new items from 5 sources',
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     status: 'success',
   },
   {
@@ -40,7 +40,7 @@ const mockActivities: Activity[] = [
     type: 'generate',
     title: 'Newsletter Generated',
     description: 'Draft ready for review',
-    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     status: 'success',
   },
 ];
@@ -90,7 +90,8 @@ export function RecentActivity({ activities = mockActivities }: RecentActivityPr
     }
   };
 
-  const formatTimestamp = (date: Date) => {
+  const formatTimestamp = (dateString: string) => {
+    const date = new Date(dateString);
     const now = new Date();
     const diffMs = date.getTime() - now.getTime();
     const diffHours = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60));

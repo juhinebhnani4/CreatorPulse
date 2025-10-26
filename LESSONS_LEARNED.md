@@ -1342,6 +1342,253 @@ It's the difference between:
 - ❌ "Meet me at Room 5" (which building?!)
 - ✅ "Meet me at Building B, Floor 2, Room 5" (crystal clear!)
 
+---
+
+## 3.4 The Blueprint That Doesn't Match the House - Schema Drift
+
+### What It Is (In Plain English)
+
+Imagine hiring a contractor to renovate your garage:
+
+**The Blueprint Says:**
+- "Garage door is 8 feet wide"
+
+**You order parts:**
+- 8-foot wide garage door
+- 8-foot door frame
+
+**You arrive at the house:**
+- Actual garage opening is 10 feet wide!
+- Your 8-foot door doesn't fit!
+
+**What happened?**
+Someone widened the garage but didn't update the blueprint.
+
+**This is "Schema Drift"** - when your documentation (migration files) says one thing, but reality (actual database) is different.
+
+---
+
+### How This Broke Our App
+
+**What our migration file said:**
+```sql
+-- Migration 002: Create content_items table
+CREATE TABLE content_items (
+    ...
+    tags TEXT[] DEFAULT '{}',  -- ← Blueprint says: TEXT array
+    ...
+);
+```
+
+**What our database actually had:**
+```sql
+-- Actual database schema
+tags JSONB  -- ← Reality: JSONB (different type!)
+```
+
+**What we wrote (following the blueprint):**
+```sql
+-- Migration 019: Limit tags array to 50 items
+CHECK (array_length(tags, 1) <= 50)  -- ← For TEXT[] arrays
+```
+
+**Error we got:**
+```
+ERROR: function array_length(jsonb, integer) does not exist
+HINT: No function matches the given name and argument types
+```
+
+**Translation:** "You're using `array_length()` for TEXT[] but the column is JSONB!"
+
+**Time wasted:** 30 minutes debugging, rewriting the migration
+
+---
+
+### Why This Happens
+
+1. **Manual database changes** - Someone runs `ALTER TABLE` in production without updating migrations
+2. **Lost migration files** - Earlier migrations were deleted or never committed
+3. **Team miscommunication** - Person A changes schema, Person B doesn't know
+4. **ORM auto-migrations** - Tool generates migration but it's not tracked properly
+
+**Real-world equivalent:**
+- Blueprint: "Kitchen has gas stove"
+- Someone installs electric stove
+- Contractor brings gas pipes → Doesn't work!
+
+---
+
+### How to Detect Schema Drift
+
+#### Method 1: Compare Migration Files to Reality
+```sql
+-- What migrations say (TEXT array):
+tags TEXT[] DEFAULT '{}'
+
+-- What database actually has (check with this query):
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'content_items' AND column_name = 'tags';
+
+-- Result:
+-- column_name | data_type
+-- tags        | jsonb      ← MISMATCH! Schema drift detected!
+```
+
+#### Method 2: Run Your Migrations on Empty Database
+```bash
+# Create test database
+createdb test_db
+
+# Run ALL migrations from scratch
+psql test_db -f migrations/001_*.sql
+psql test_db -f migrations/002_*.sql
+# ... etc
+
+# If migration fails, you have drift!
+```
+
+#### Method 3: Trust the Error Messages
+```
+ERROR: function array_length(jsonb, ...) does not exist
+                           ^^^^
+                           This tells you the ACTUAL type!
+```
+
+---
+
+### How to Fix Schema Drift
+
+**Option 1: Update the Migration** (if you caught it early)
+```sql
+-- OLD (based on wrong blueprint):
+CHECK (array_length(tags, 1) <= 50)  -- For TEXT[]
+
+-- NEW (matches reality):
+CHECK (jsonb_array_length(tags) <= 50)  -- For JSONB
+```
+
+**Option 2: Create a New Migration** (if already in production)
+```sql
+-- Migration 021: Fix tags column type
+ALTER TABLE content_items
+ALTER COLUMN tags TYPE TEXT[] USING tags::TEXT[];
+
+-- Now matches original blueprint!
+```
+
+**Option 3: Update the Blueprint** (accept the new reality)
+```sql
+-- Update Migration 002 documentation:
+-- NOTE: In production, this column was changed to JSONB in 2024-12
+-- Future migrations should use jsonb_array_length(), not array_length()
+```
+
+---
+
+### How to Prevent Schema Drift
+
+#### Rule 1: Single Source of Truth
+**Migrations are the ONLY way to change schema**
+
+❌ **Never do this:**
+```sql
+-- Running this directly in production database console:
+ALTER TABLE content_items ALTER COLUMN tags TYPE JSONB;
+```
+
+✅ **Always do this:**
+```sql
+-- Create migration file first:
+-- migrations/021_change_tags_to_jsonb.sql
+ALTER TABLE content_items ALTER COLUMN tags TYPE JSONB;
+
+-- Then apply it:
+psql $DATABASE_URL -f migrations/021_change_tags_to_jsonb.sql
+```
+
+#### Rule 2: Pre-Migration Validation
+Add this to all migrations:
+```sql
+-- Check expected schema BEFORE changing it
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'content_items'
+          AND column_name = 'tags'
+          AND data_type = 'ARRAY'  -- Expected type
+    ) THEN
+        RAISE EXCEPTION 'Schema drift detected! Expected tags to be TEXT[] but found different type';
+    END IF;
+END $$;
+
+-- Now apply the change
+ALTER TABLE content_items ...
+```
+
+#### Rule 3: Regular Audits
+```bash
+# Monthly: Compare migrations to reality
+# Create script: check_schema_drift.sh
+
+#!/bin/bash
+echo "Checking for schema drift..."
+
+# Generate schema from migrations
+psql temp_db -f migrations/*.sql
+
+# Compare to production
+pg_dump --schema-only prod_db > prod_schema.sql
+pg_dump --schema-only temp_db > expected_schema.sql
+
+diff prod_schema.sql expected_schema.sql
+# If different → Schema drift!
+```
+
+---
+
+### Real-World Analogies
+
+| **Scenario** | **Blueprint** | **Reality** | **Result** |
+|--------------|---------------|-------------|------------|
+| **Garage door** | 8 feet wide | 10 feet wide | Door doesn't fit |
+| **Electrical outlet** | 120V US plug | 220V EU socket | Can't plug in |
+| **Door key** | 5-pin lock | 6-pin lock changed last year | Key doesn't work |
+| **Database column** | `tags TEXT[]` | `tags JSONB` | Queries fail |
+
+---
+
+### Quick Diagnostic Checklist
+
+When you get a cryptic SQL error:
+
+- [ ] **Check error message** for actual data type mentioned
+- [ ] **Query information_schema** to see real column type
+- [ ] **Compare** migration files to actual schema
+- [ ] **Ask team:** "Did anyone manually change the database?"
+- [ ] **Check git history:** Look for uncommitted ALTER TABLE commands
+- [ ] **Test migrations** on empty database to reproduce
+
+---
+
+### Key Takeaway
+
+**Before:** Migration files say one thing, database has another → Mysterious failures
+
+**After:** Single source of truth (migrations) + regular audits → Consistency
+
+**Remember:**
+- Blueprint = Migration files
+- House = Actual database
+- If they don't match, someone changed the house without updating the blueprint
+- ALWAYS update both at the same time!
+
+**Golden Rule:**
+> "Never change your database schema without a migration file. Never write a migration without checking reality first."
+
+---
+
 ## 2.6 The Logout Button Doesn't Clear Your Memory
 
 ### What It Is (In Plain English)
