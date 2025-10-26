@@ -3053,6 +3053,317 @@ invalidateNewsletters();   // Frontend refetches NOW ✅
 
 ---
 
+## 2.11 Database Constraints: The Last Line of Defense Against Duplicates
+
+### What It Is (In Plain English)
+
+Imagine a hotel reservation system that lets you book the SAME room twice for the same night. Two guests show up at the front desk, both with confirmation emails for Room 305 on the same date. Chaos!
+
+**The problem:** No rule preventing double-booking
+**The solution:** Hotel system enforces: "Each room can only be booked once per night"
+**In database terms:** This is a UNIQUE constraint
+
+### Real-World Analogy: The Student ID System
+
+**Bad System (No Constraint):**
+```
+School Office: "Let's give everyone an ID number"
+- First John gets ID: 12345
+- Second John gets ID: 12345 (nobody checks!)
+- Both Johns show up to collect their diplomas
+- Registrar: "Which John is this for?!" 🤷
+```
+
+**Good System (With Constraint):**
+```
+School Office: "Each student gets ONE unique ID (no duplicates allowed)"
+- First John gets ID: 12345
+- Computer tries to give Second John ID: 12345
+- System: ❌ "ERROR: ID 12345 already exists! Assign ID 12346"
+- Every John has a different ID ✅
+- Diploma pickup works perfectly
+```
+
+**This is what database UNIQUE constraints do for your data!**
+
+### Our Real Example: Duplicate Trends
+
+**The Problem:** Running trend detection twice created duplicate trends in the database
+
+**What users saw in database:**
+```
+Trends Table:
+id: 1, topic: "Microsoft",        workspace_id: abc-123
+id: 2, topic: "Microsoft",        workspace_id: abc-123  ← DUPLICATE!
+id: 3, topic: "TechCrunch 2025",  workspace_id: abc-123
+id: 4, topic: "TechCrunch 2025",  workspace_id: abc-123  ← DUPLICATE!
+```
+
+**What should have been there:**
+```
+Trends Table:
+id: 1, topic: "Microsoft",        workspace_id: abc-123  ✅ One entry per topic
+id: 2, topic: "TechCrunch 2025",  workspace_id: abc-123  ✅ No duplicates
+```
+
+### How It Broke Our App
+
+**Scenario:**
+1. User runs "Detect Trends" at 9:00 AM
+   - Backend creates trend: "Microsoft" with 10 mentions
+   - Saved to database ✅
+
+2. User runs "Detect Trends" again at 9:05 AM
+   - Backend finds "Microsoft" again (now 15 mentions)
+   - **PROBLEM:** Code does INSERT instead of UPDATE
+   - Creates SECOND "Microsoft" trend with 15 mentions
+   - Database allows it (no UNIQUE constraint) ❌
+
+3. User opens Trends page
+   - Sees "Microsoft" listed TWICE
+   - Confusing! Which one is correct?
+
+**Root Cause (Three Layers of Missing Protection):**
+
+**Layer 1: Database (No Bouncer at the Door)**
+```sql
+-- ❌ WRONG: Just an index (speeds up searches but allows duplicates)
+CREATE INDEX idx_trends_workspace_topic ON trends(workspace_id, topic);
+
+-- ✅ RIGHT: UNIQUE constraint (prevents duplicates entirely)
+ALTER TABLE trends
+ADD CONSTRAINT unique_workspace_topic UNIQUE (workspace_id, topic);
+```
+
+**Layer 2: Backend Code (Always Adding, Never Updating)**
+```python
+# ❌ WRONG: Always INSERT (creates new row every time)
+def save_trend(trend_data):
+    db.table('trends').insert(trend_data).execute()
+    # Run twice → Two rows with same topic!
+
+# ✅ RIGHT: UPSERT (insert if new, update if exists)
+def save_trend(trend_data):
+    db.table('trends').upsert(
+        trend_data,
+        on_conflict='workspace_id,topic'  # If this combo exists, UPDATE instead
+    ).execute()
+    # Run twice → Same row updated with latest data!
+```
+
+**Layer 3: Frontend (Using Wrong Field Names)**
+```typescript
+// ❌ WRONG: Frontend expected different field names
+interface Trend {
+  content_count: number;        // Backend uses: mention_count
+  key_content_ids: string[];    // Backend uses: key_content_item_ids
+  status: 'rising' | 'peak';    // Backend doesn't have this field!
+}
+
+// ✅ RIGHT: Frontend matches backend exactly
+interface Trend {
+  mention_count: number;        // ✅ Same as backend
+  key_content_item_ids: string[]; // ✅ Same as backend
+  confidence_level: string;     // ✅ Same as backend
+}
+```
+
+### The Three-Layer Fix
+
+**Fix 1: Database - Add UNIQUE Constraint (The Bouncer)**
+```sql
+-- This is your last line of defense!
+ALTER TABLE trends
+ADD CONSTRAINT unique_workspace_topic UNIQUE (workspace_id, topic);
+
+-- Now database REJECTS duplicates:
+-- INSERT trend "Microsoft", workspace abc → ✅ Allowed
+-- INSERT trend "Microsoft", workspace abc → ❌ ERROR: duplicate key
+```
+
+**Fix 2: Backend - Use UPSERT Instead of INSERT**
+```python
+# Before (always creates new row):
+db.create_trend(trend_data)
+
+# After (creates OR updates):
+db.upsert_trend(trend_data, on_conflict='workspace_id,topic')
+```
+
+**Fix 3: Frontend - Fix Field Name Mismatches**
+```typescript
+// Import types from single source of truth
+import { Trend } from '@/types/trend';  // Backend-matching types
+
+// ✅ No more manual interface duplication
+// ✅ Always in sync with backend
+```
+
+### Why This Three-Layer Approach Matters
+
+Think of it like airport security:
+
+**Layer 1 (Frontend):** Check boarding pass matches photo ID
+**Layer 2 (Backend):** Scan luggage for prohibited items
+**Layer 3 (Database):** Final verification before entering gate
+
+**If Layer 1 fails** (frontend sends duplicate) → Layer 2 catches it (UPSERT)
+**If Layer 2 fails** (backend tries to INSERT duplicate) → Layer 3 catches it (UNIQUE constraint)
+
+**No single layer is perfect, but together they create a safety net!**
+
+### When You Need This
+
+✅ **Use UNIQUE constraints when:**
+- Data should only appear once (usernames, email addresses, URLs)
+- Recurring operations might create duplicates (trend detection, analytics aggregation)
+- Multiple users/processes write to same table concurrently
+
+❌ **Don't use UNIQUE constraints when:**
+- Duplicates are valid (order history, log entries, messages)
+- Data is naturally one-time (e.g., timestamps with millisecond precision)
+
+### Real-World Examples
+
+| Use Case | UNIQUE Constraint | Reason |
+|----------|-------------------|---------|
+| User emails | ✅ `UNIQUE(email)` | Each email belongs to one account |
+| Content URLs | ✅ `UNIQUE(workspace_id, source_url)` | Same article shouldn't be scraped twice |
+| Trends | ✅ `UNIQUE(workspace_id, topic)` | One trend per topic per workspace |
+| Newsletter deliveries | ❌ No constraint | Same newsletter can be sent multiple times |
+| Analytics events | ❌ No constraint | Same user can click same link multiple times |
+
+### The Fix in Action
+
+**Before (duplicates everywhere):**
+```sql
+SELECT topic, COUNT(*) as count
+FROM trends
+WHERE workspace_id = 'abc-123'
+GROUP BY topic
+HAVING COUNT(*) > 1;
+
+-- Result:
+-- "Microsoft": 3 duplicates
+-- "TechCrunch 2025": 2 duplicates
+-- "AI Revolution": 2 duplicates
+```
+
+**After (clean data):**
+```sql
+-- Same query:
+-- Result: 0 rows (no duplicates!) ✅
+
+-- Each topic appears exactly once:
+SELECT topic, mention_count FROM trends WHERE workspace_id = 'abc-123';
+
+-- Result:
+-- "Microsoft", 15
+-- "TechCrunch 2025", 12
+-- "AI Revolution", 8
+```
+
+### How to Implement This in Your Project
+
+**Step 1: Identify What Should Be Unique**
+```
+Ask yourself: "Can this combination appear more than once?"
+- (user_id, date) for daily summaries → NO → Add UNIQUE
+- (workspace_id, topic) for trends → NO → Add UNIQUE
+- (newsletter_id, subscriber_email) for deliveries → YES → No constraint
+```
+
+**Step 2: Add UNIQUE Constraint**
+```sql
+-- Pattern:
+ALTER TABLE your_table
+ADD CONSTRAINT unique_constraint_name UNIQUE (column1, column2);
+
+-- Example:
+ALTER TABLE content_items
+ADD CONSTRAINT unique_workspace_url UNIQUE (workspace_id, source_url);
+```
+
+**Step 3: Update Code to Use UPSERT**
+```python
+# Old way (creates duplicates):
+db.table('trends').insert(data).execute()
+
+# New way (prevents duplicates):
+db.table('trends').upsert(data, on_conflict='workspace_id,topic').execute()
+```
+
+**Step 4: Clean Up Existing Duplicates**
+```sql
+-- Find duplicates:
+SELECT workspace_id, topic, COUNT(*)
+FROM trends
+GROUP BY workspace_id, topic
+HAVING COUNT(*) > 1;
+
+-- Delete duplicates (keep strongest):
+DELETE FROM trends
+WHERE id NOT IN (
+    SELECT (array_agg(id ORDER BY strength_score DESC))[1]
+    FROM trends
+    GROUP BY workspace_id, topic
+);
+```
+
+### Prevention Checklist
+
+**When designing new features, ask:**
+
+✅ **"Could this create duplicates if run twice?"**
+- If YES → Add UNIQUE constraint + use UPSERT
+
+✅ **"Do frontend and backend use identical field names?"**
+- If NO → Create single source of truth (shared types file)
+
+✅ **"Does the database enforce uniqueness?"**
+- If NO → Add constraint (don't rely on code alone)
+
+### Key Takeaway
+
+**Before (three points of failure):**
+- ❌ Database allows duplicates (no constraint)
+- ❌ Backend always INSERTs (never updates)
+- ❌ Frontend uses wrong field names (data doesn't display)
+- **Result:** Duplicate data, broken UI, confused users
+
+**After (three layers of protection):**
+- ✅ Database rejects duplicates (UNIQUE constraint)
+- ✅ Backend updates existing data (UPSERT)
+- ✅ Frontend matches backend (shared types)
+- **Result:** Clean data, working UI, happy users
+
+**Remember:**
+- ❌ Relying on code alone = "Trust me, I won't double-book rooms!"
+- ✅ Database constraint = Hotel system that PREVENTS double-booking
+
+**It's like:**
+- ❌ Asking hotel clerk to "please remember not to double-book" → They will forget!
+- ✅ Hotel computer system blocks double-bookings automatically → Never fails
+
+**Golden Rule:**
+> "Code can have bugs, humans can make mistakes, but database constraints are mathematical guarantees. Use them as your last line of defense!"
+
+**Time saved by using UNIQUE constraints:**
+- Prevents hours of debugging "why are there duplicates?"
+- Prevents data corruption from accumulating over weeks
+- Prevents emergency hotfixes when users report inconsistent data
+
+**Real example from our project:**
+- Problem: 8 duplicate trends in database after multiple detection runs
+- Time to identify root cause: 2 hours (checking all three layers)
+- Time to implement three-layer fix: 1 hour
+- Time to clean up existing duplicates: 15 minutes
+- **Total investment:** 3 hours 15 minutes
+- **Duplicates created since fix:** 0 ✅
+- **User complaints about duplicates:** 0 ✅
+
+---
+
 # Part 4: Common Traps (Avoid These!) ⚠️
 
 > **Big Idea:** Everyone makes these mistakes. Learn from ours so you don't have to!
