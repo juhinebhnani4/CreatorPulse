@@ -26,8 +26,8 @@ class NewsletterResponse(BaseModel):
     id: str
     workspace_id: str
     title: str
-    content_html: str  # Changed from html_content to match frontend
-    content_text: Optional[str]  # Changed from plain_text_content to match frontend
+    content_html: str  # Matches database column name (after migration 017)
+    content_text: Optional[str]  # Matches database column name (after migration 017)
     content_item_ids: List[str] = []
     content_items_count: int
     model_used: str

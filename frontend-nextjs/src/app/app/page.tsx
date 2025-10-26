@@ -835,9 +835,9 @@ export default function DashboardPage() {
               setShowDraftEditor(false);
               setJustGeneratedNewsletter(null);
             }}
-            draftId={justGeneratedNewsletter?.id || latestNewsletter.id}
-            subject={justGeneratedNewsletter?.subject_line || latestNewsletter.subject_line}
-            items={(justGeneratedNewsletter?.items || latestNewsletter.items || []).map(transformNewsletterItemToFrontend)}
+            draftId={justGeneratedNewsletter?.id || latestNewsletter?.id || ''}
+            subject={justGeneratedNewsletter?.subject_line || latestNewsletter?.subject_line || 'Untitled Newsletter'}
+            items={(justGeneratedNewsletter?.items || latestNewsletter?.items || []).map(transformNewsletterItemToFrontend)}
             onSave={handleSaveDraft}
             onEditArticle={handleEditArticle}
             onSendNow={() => {
